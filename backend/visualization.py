@@ -5,7 +5,6 @@
 import logging
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 from io import BytesIO
 import base64
@@ -13,7 +12,11 @@ from typing import List, Optional, Tuple, Dict, Any
 import google.generativeai as genai
 from sklearn.metrics.pairwise import cosine_similarity
 
-# 設定中文字體支援
+# 設定 matplotlib 後端和中文字體支援
+import matplotlib
+matplotlib.use('Agg')  # 使用非GUI後端，避免線程問題
+import matplotlib.pyplot as plt
+
 plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'Helvetica', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
@@ -27,37 +30,26 @@ class VisualizationEngine:
     
     async def create_similarity_matrices(self, texts: List[str], names: List[str] = None, 
                                        question_id: int = 1, use_genai: bool = True) -> Dict[str, Optional[str]]:
-        """創建相似度矩陣視覺化
+        """創建相似度矩陣視覺化（僅本地算法）
         
         Args:
             texts: 文本列表
             names: 姓名列表
             question_id: 問題編號
-            use_genai: 是否使用GenAI
+            use_genai: 是否使用GenAI（已棄用，僅保留本地算法）
             
         Returns:
             Dict: 包含base64編碼圖像的字典
         """
         if len(texts) < 2:
-            return {'genai_matrix': None, 'local_matrix': None}
+            return {'local_matrix': None}
         
         result = {}
         
         # 準備標籤
         labels = self._prepare_labels(names, len(texts))
         
-        # 創建GenAI相似度矩陣（如果可用）
-        if use_genai:
-            try:
-                genai_matrix = await self._create_genai_matrix(texts, labels, question_id)
-                result['genai_matrix'] = genai_matrix
-            except Exception as e:
-                self.logger.error(f"GenAI矩陣創建失敗: {e}")
-                result['genai_matrix'] = None
-        else:
-            result['genai_matrix'] = None
-        
-        # 創建本地相似度矩陣
+        # 只創建本地相似度矩陣
         try:
             local_matrix = self._create_local_matrix(texts, labels, question_id)
             result['local_matrix'] = local_matrix
@@ -193,18 +185,24 @@ class VisualizationEngine:
                 <meta charset="UTF-8">
                 <title>AI-TA-Grader 分析報告</title>
                 <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
                     .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                               color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }}
                     .summary {{ background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
                     .question-section {{ margin-bottom: 30px; border: 1px solid #dee2e6; 
-                                        border-radius: 8px; padding: 15px; }}
+                                        border-radius: 8px; padding: 15px; background: white; }}
                     .matrix-container {{ text-align: center; margin: 20px 0; }}
-                    table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+                    .matrix-container img {{ box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 5px; }}
+                    table {{ border-collapse: collapse; width: 100%; margin-top: 20px; background: white; }}
                     th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                    th {{ background-color: #f2f2f2; }}
+                    th {{ background-color: #f2f2f2; font-weight: bold; }}
                     .high-similarity {{ background-color: #ffebee; }}
                     .medium-similarity {{ background-color: #fff3e0; }}
+                    .ai-high {{ background-color: #ffcdd2; }}
+                    .ai-medium {{ background-color: #ffe0b2; }}
+                    .ai-low {{ background-color: #c8e6c9; }}
+                    .score-table {{ margin: 20px 0; }}
+                    .score-table th {{ background-color: #e3f2fd; }}
                 </style>
             </head>
             <body>
@@ -221,7 +219,19 @@ class VisualizationEngine:
                     <p><strong>檢測到相似度異常:</strong> {similarity_issues}</p>
                 </div>
                 
+                {ai_risk_table}
+                
                 {content_sections}
+                
+                <div class="summary">
+                    <h2>📊 相似度詳細分析表</h2>
+                    {similarity_table}
+                </div>
+                
+                <div class="summary">
+                    <h2>🤖 AI 分析詳細記錄</h2>
+                    {ai_logs}
+                </div>
                 
                 <div class="summary">
                     <h2>📋 完整數據表</h2>
@@ -240,10 +250,13 @@ class VisualizationEngine:
             score_columns = [col for col in df.columns if '_分數' in col]
             analyzed_questions = ', '.join([col.replace('_分數', '') for col in score_columns])
             
-            similarity_columns = [col for col in df.columns if '_相似度標記' in col]
+            similarity_columns = [col for col in df.columns if '_相似度分數' in col]
             similarity_issues = 0
             for col in similarity_columns:
-                similarity_issues += sum(1 for flag in df[col] if flag > 0)
+                similarity_issues += sum(1 for score in df[col] if pd.notna(score) and score > 70)
+            
+            # 生成AI風險表格
+            ai_risk_table = self._generate_ai_risk_table(df)
             
             # 生成問題部分
             content_sections = ""
@@ -251,8 +264,16 @@ class VisualizationEngine:
                 section = self._generate_question_section(question_id, viz_data)
                 content_sections += section
             
-            # 生成數據表
-            data_table = df.to_html(classes='table table-striped', escape=False)
+            # 生成AI記錄部分
+            ai_logs = self._generate_ai_logs_section()
+            
+            # 生成相似度表格
+            similarity_table = self._generate_similarity_table(df)
+            
+            # 生成數據表 - 只顯示重要欄位
+            important_cols = ['name'] + [col for col in df.columns if '_分數' in col or '_相似度分數' in col or '_AI風險' in col]
+            display_df = df[important_cols] if all(col in df.columns for col in important_cols) else df
+            data_table = display_df.to_html(classes='table table-striped', escape=False, index=False)
             
             # 組合最終HTML
             html_content = html_template.format(
@@ -260,7 +281,10 @@ class VisualizationEngine:
                 total_students=total_students,
                 analyzed_questions=analyzed_questions,
                 similarity_issues=similarity_issues,
+                ai_risk_table=ai_risk_table,
                 content_sections=content_sections,
+                similarity_table=similarity_table,
+                ai_logs=ai_logs,
                 data_table=data_table
             )
             
@@ -272,28 +296,179 @@ class VisualizationEngine:
     
     def _generate_question_section(self, question_id: str, viz_data: Dict[str, Any]) -> str:
         """生成問題部分的HTML"""
-        section = f"""
-        <div class="question-section">
-            <h3>📝 {question_id} 分析結果</h3>
+        try:
+            section_html = f"""
+            <div class="question-section">
+                <h2>📝 {question_id} 分析結果</h2>
+            """
+            
+            # 添加相似度矩陣圖片（僅本地算法）
+            if viz_data:
+                if 'local_matrix' in viz_data and viz_data['local_matrix']:
+                    section_html += f"""
+                    <div class="matrix-container">
+                        <h3>相似度分析矩陣</h3>
+                        <img src="data:image/png;base64,{viz_data['local_matrix']}" style="max-width: 100%; height: auto;">
+                    </div>
+                    """
+            
+            section_html += "</div>"
+            return section_html
+            
+        except Exception as e:
+            self.logger.error(f"生成問題部分失敗: {e}")
+            return ""
+    
+    def _generate_ai_risk_table(self, df: pd.DataFrame) -> str:
+        """生成AI使用嫌疑度表格"""
+        try:
+            # 查找所有AI風險欄位
+            ai_risk_columns = [col for col in df.columns if 'AI風險' in col or 'ai_risk' in col]
+            
+            if not ai_risk_columns:
+                return ""
+            
+            # 建立AI風險表格
+            table_html = """
+            <div class="summary">
+                <h2>🤖 AI使用嫌疑度分析</h2>
+                <table class="score-table">
+                    <thead>
+                        <tr>
+                            <th>學生姓名</th>
+            """
+            
+            # 添加問題欄位
+            for col in ai_risk_columns:
+                q_num = col.replace('Q', '').replace('_AI風險', '').replace('_ai_risk', '')
+                table_html += f"<th>Q{q_num} AI風險</th>"
+            
+            table_html += """
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            
+            # 添加每個學生的數據
+            for idx, row in df.iterrows():
+                table_html += "<tr>"
+                table_html += f"<td>{row.get('name', f'學生{idx+1}')}</td>"
+                
+                for col in ai_risk_columns:
+                    risk_value = row.get(col, 0)
+                    if pd.isna(risk_value):
+                        risk_value = 0
+                    
+                    # 根據風險值設定顏色
+                    if risk_value >= 70:
+                        css_class = "ai-high"
+                    elif risk_value >= 40:
+                        css_class = "ai-medium"
+                    else:
+                        css_class = "ai-low"
+                    
+                    table_html += f'<td class="{css_class}">{int(risk_value)}</td>'
+                
+                table_html += "</tr>"
+            
+            table_html += """
+                    </tbody>
+                </table>
+                <p style="margin-top: 10px; font-size: 0.9em;">
+                    <span style="background: #ffcdd2; padding: 2px 8px;">高風險 (≥70)</span>
+                    <span style="background: #ffe0b2; padding: 2px 8px;">中風險 (40-69)</span>
+                    <span style="background: #c8e6c9; padding: 2px 8px;">低風險 (<40)</span>
+                </p>
+            </div>
+            """
+            
+            return table_html
+            
+        except Exception as e:
+            self.logger.error(f"生成AI風險表格失敗: {e}")
+            return ""
+    
+    def _generate_ai_logs_section(self) -> str:
+        """生成AI分析記錄部分"""
+        return """
+        <p><strong>注意：</strong> AI 分析的詳細記錄會顯示在控制台輸出中，包括：</p>
+        <ul>
+            <li>🤖 發送給 Gemini 的 Prompt 內容</li>
+            <li>📝 學生回答摘要</li>
+            <li>🤖 Gemini 的完整回應</li>
+            <li>📊 解析出的分數和 AI 風險評估</li>
+            <li>🔍 相似度檢測詳細結果</li>
+        </ul>
+        <p><em>如果您使用了有效的 API 金鑰，這些記錄會即時顯示在運行程式的終端視窗中。</em></p>
         """
-        
-        if viz_data.get('genai_matrix'):
-            section += f"""
-            <div class="matrix-container">
-                <h4>GenAI 語義相似度矩陣</h4>
-                <img src="data:image/png;base64,{viz_data['genai_matrix']}" style="max-width: 100%; height: auto;">
-            </div>
+    
+    def _generate_similarity_table(self, df: pd.DataFrame) -> str:
+        """生成相似度分析表格"""
+        try:
+            # 查找所有相似度分數欄位
+            similarity_columns = [col for col in df.columns if '_相似度分數' in col]
+            
+            if not similarity_columns:
+                return "<p>無相似度分析數據</p>"
+            
+            # 建立相似度表格
+            table_html = """
+            <table class="score-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background-color: #e3f2fd;">
+                        <th style="border: 1px solid #ddd; padding: 8px;">學生姓名</th>
             """
-        
-        if viz_data.get('local_matrix'):
-            section += f"""
-            <div class="matrix-container">
-                <h4>多算法相似度矩陣</h4>
-                <img src="data:image/png;base64,{viz_data['local_matrix']}" style="max-width: 100%; height: auto;">
-            </div>
+            
+            # 添加問題欄位
+            for col in similarity_columns:
+                q_num = col.replace('Q', '').replace('_相似度分數', '')
+                table_html += f'<th style="border: 1px solid #ddd; padding: 8px;">Q{q_num} 相似度</th>'
+            
+            table_html += """
+                    </tr>
+                </thead>
+                <tbody>
             """
-        
-        section += "</div>"
-        return section
+            
+            # 添加每個學生的數據
+            for idx, row in df.iterrows():
+                table_html += "<tr>"
+                table_html += f'<td style="border: 1px solid #ddd; padding: 8px;">{row.get("name", f"學生{idx+1}")}</td>'
+                
+                for col in similarity_columns:
+                    score = row.get(col, 0)
+                    if pd.isna(score):
+                        score = 0
+                    
+                    # 根據相似度分數設定顏色
+                    if score >= 85:
+                        css_style = "background-color: #ffcdd2; border: 1px solid #ddd; padding: 8px;"  # 高相似度-紅色
+                    elif score >= 70:
+                        css_style = "background-color: #ffe0b2; border: 1px solid #ddd; padding: 8px;"  # 中相似度-橘色
+                    elif score >= 50:
+                        css_style = "background-color: #fff3e0; border: 1px solid #ddd; padding: 8px;"  # 低相似度-黃色
+                    else:
+                        css_style = "background-color: #c8e6c9; border: 1px solid #ddd; padding: 8px;"  # 無相似度-綠色
+                    
+                    table_html += f'<td style="{css_style}">{int(score)}</td>'
+                
+                table_html += "</tr>"
+            
+            table_html += """
+                    </tbody>
+                </table>
+                <p style="margin-top: 10px; font-size: 0.9em;">
+                    <span style="background: #ffcdd2; padding: 2px 8px; margin-right: 10px;">高相似度 (≥85分)</span>
+                    <span style="background: #ffe0b2; padding: 2px 8px; margin-right: 10px;">中相似度 (70-84分)</span>
+                    <span style="background: #fff3e0; padding: 2px 8px; margin-right: 10px;">低相似度 (50-69分)</span>
+                    <span style="background: #c8e6c9; padding: 2px 8px;">無相似度 (<50分)</span>
+                </p>
+            """
+            
+            return table_html
+            
+        except Exception as e:
+            self.logger.error(f"生成相似度表格失敗: {e}")
+            return "<p>相似度表格生成失敗</p>"
 
 

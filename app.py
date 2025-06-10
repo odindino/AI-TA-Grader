@@ -139,17 +139,71 @@ class Api:
                 # 初始化分析引擎
                 engine = AnalysisEngine(api_key if api_key else None)
                 
+                # 設定日誌處理器，將後端日誌傳遞到前端和文件
+                import logging
+                from datetime import datetime
+                
+                # 創建日誌文件名
+                log_filename = f"AI_TA_Grader_Log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+                log_filepath = os.path.join(os.path.dirname(file_path), log_filename)
+                
+                class CombinedLogHandler(logging.Handler):
+                    def __init__(self, callback, log_file_path):
+                        super().__init__()
+                        self.callback = callback
+                        self.log_file_path = log_file_path
+                        self.log_messages = []
+                    
+                    def emit(self, record):
+                        msg = self.format(record)
+                        # 發送到前端
+                        if self.callback:
+                            self.callback(msg)
+                        # 記錄到內存中
+                        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        log_entry = f"[{timestamp}] {msg}"
+                        self.log_messages.append(log_entry)
+                    
+                    def save_to_file(self):
+                        try:
+                            with open(self.log_file_path, 'w', encoding='utf-8') as f:
+                                f.write(f"AI-TA-Grader 分析日誌\\n")
+                                f.write(f"生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\\n")
+                                f.write("="*80 + "\\n\\n")
+                                for msg in self.log_messages:
+                                    f.write(msg + "\\n")
+                            self.callback(f"📄 分析日誌已保存: {os.path.basename(self.log_file_path)}")
+                        except Exception as e:
+                            self.callback(f"❌ 保存日誌失敗: {str(e)}")
+                
+                # 為所有後端模組添加組合日誌處理器
+                combined_handler = CombinedLogHandler(self._log_to_frontend, log_filepath)
+                combined_handler.setLevel(logging.INFO)
+                combined_handler.setFormatter(logging.Formatter('%(levelname)s - %(name)s - %(message)s'))
+                
+                # 為各個模組添加處理器
+                logging.getLogger('backend.gemini_client').addHandler(combined_handler)
+                logging.getLogger('backend.similarity_detector').addHandler(combined_handler)
+                logging.getLogger('backend.analyzer').addHandler(combined_handler)
+                
                 # 如果有API金鑰，設定Gemini
                 if api_key:
                     engine.configure_gemini(api_key, model_name)
                 
                 # 執行完整數據集分析
+                self._log_to_frontend("📊 開始執行數據分析...")
                 results = loop.run_until_complete(
                     engine.analyze_complete_dataset(file_path, self._log_to_frontend)
                 )
                 
+                self._log_to_frontend(f"📊 分析結果已生成，準備保存...")
+                self._log_to_frontend(f"   DataFrame shape: {results['dataframe'].shape}")
+                
                 # 保存結果
                 self._save_analysis_results(results, unique_output_base_name)
+                
+                # 保存日誌文件
+                combined_handler.save_to_file()
                 
                 self._log_to_frontend("✅ 分析完成！")
             finally:
@@ -161,29 +215,32 @@ class Api:
             self._log_to_frontend(f"❌ 分析過程中發生錯誤: {str(e)}")
     
     def _save_analysis_results(self, results, output_base_name):
-        """保存分析結果到多種格式"""
+        """保存分析結果到CSV和HTML格式"""
         try:
             df = results['dataframe']
             html_report = results['html_report']
             
-            # 保存Excel檔案
-            xlsx_path = f"{output_base_name}.xlsx"
-            df.to_excel(xlsx_path, index=False)
-            self._log_to_frontend(f"📊 Excel報告已保存: {os.path.basename(xlsx_path)}")
+            # 保存CSV檔案
+            csv_path = f"{output_base_name}.csv"
+            df.to_csv(csv_path, index=False)
+            self._log_to_frontend(f"📋 CSV檔案已保存: {os.path.basename(csv_path)}")
+            self._log_to_frontend(f"   完整路徑: {os.path.abspath(csv_path)}")
             
             # 保存HTML報告
             html_path = f"{output_base_name}.html"
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(html_report)
             self._log_to_frontend(f"🌐 HTML報告已保存: {os.path.basename(html_path)}")
+            self._log_to_frontend(f"   完整路徑: {os.path.abspath(html_path)}")
             
-            # 保存CSV檔案
-            csv_path = f"{output_base_name}.csv"
-            df.to_csv(csv_path, index=False)
-            self._log_to_frontend(f"📋 CSV檔案已保存: {os.path.basename(csv_path)}")
+            # 在檔案管理器中開啟輸出目錄
+            output_dir = os.path.dirname(os.path.abspath(csv_path))
+            self._log_to_frontend(f"📁 所有報告已保存至: {output_dir}")
             
         except Exception as e:
             self._log_to_frontend(f"❌ 保存結果時發生錯誤: {str(e)}")
+            import traceback
+            self._log_to_frontend(f"錯誤詳情: {traceback.format_exc()}")
 
     def _log_to_frontend(self, message: str):
         """

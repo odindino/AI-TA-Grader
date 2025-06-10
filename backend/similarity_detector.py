@@ -50,6 +50,13 @@ class SimilarityDetector:
             # 計算相似度標記
             flags = self._calculate_flags_from_matrix(similarity_matrix, texts)
             
+            # 記錄相似度檢測結果
+            self.logger.info(f"🔍 GenAI 相似度檢測結果:")
+            for i, flag in enumerate(flags):
+                if flag > 0:
+                    max_sim = max(similarity_matrix[i][j] for j in range(len(texts)) if i != j) if len(texts) > 1 else 0
+                    self.logger.info(f"  學生 {i+1}: 標記={flag}, 最高相似度={max_sim:.3f}")
+            
             return {
                 'flags': flags,
                 'matrix': similarity_matrix,
@@ -90,11 +97,18 @@ class SimilarityDetector:
                     elif i == j:
                         similarity_matrix[i][j] = 1.0
             
-            # 計算相似度標記
-            flags = self._calculate_flags_from_matrix(similarity_matrix, texts)
+            # 計算相似度分數 (0-100)
+            scores = self._calculate_scores_from_matrix(similarity_matrix, texts)
+            
+            # 記錄本地相似度檢測結果
+            self.logger.info(f"🔍 本地相似度檢測結果:")
+            for i, score in enumerate(scores):
+                if score > 0:
+                    max_sim = max(similarity_matrix[i][j] for j in range(len(texts)) if i != j) if len(texts) > 1 else 0
+                    self.logger.info(f"  學生 {i+1}: 相似度分數={score}, 最高相似度={max_sim:.3f}")
             
             return {
-                'flags': flags,
+                'scores': scores,
                 'matrix': similarity_matrix,
                 'info': {
                     'method': 'local',
@@ -106,7 +120,7 @@ class SimilarityDetector:
         except Exception as e:
             self.logger.error(f"本地相似度計算失敗: {e}")
             return {
-                'flags': [-1] * len(texts),
+                'scores': [0] * len(texts),
                 'matrix': None,
                 'info': {
                     'method': 'error',
@@ -141,6 +155,30 @@ class SimilarityDetector:
                 flags[i] = 1  # 中等相似
         
         return flags
+    
+    def _calculate_scores_from_matrix(self, similarity_matrix: np.ndarray, texts: List[str]) -> List[int]:
+        """從相似度矩陣計算0-100分的相似度分數"""
+        n = len(texts)
+        scores = [0] * n
+        
+        min_length = self.thresholds.get('min_length', 50)
+        
+        for i in range(n):
+            # 檢查文本長度
+            if len(texts[i].strip()) < min_length:
+                scores[i] = 0
+                continue
+            
+            max_similarity = 0.0
+            for j in range(n):
+                if i != j:
+                    max_similarity = max(max_similarity, similarity_matrix[i][j])
+            
+            # 將相似度轉換為0-100分
+            score = int(max_similarity * 100)
+            scores[i] = score
+        
+        return scores
 
 
 # 保持向後相容的函數接口
@@ -171,7 +209,7 @@ def calculate_similarity_flags(texts: List[str], names: List[str] = None, hi: fl
     mid = thresholds.get('medium', mid)
     min_length = thresholds.get('min_length', min_length)
     
-    if use_api and gmodel:
+    if use_api:
         # 使用 GenAI API 方法
         try:
             # 預處理文本

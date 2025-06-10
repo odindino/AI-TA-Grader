@@ -135,9 +135,11 @@ Thumbs.db
 
 # Output reports
 *_report.xlsx
-*_report.csv
 *_report.yaml
-*_report.html
 
 # Specific test files
-Final Exam Quiz Student Analysis Report.csv
+Final Exam Quiz Student Analysis Report*.csv
+
+# Specific documentation files
+Claude.md
+.claude

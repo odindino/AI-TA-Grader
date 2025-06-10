@@ -39,7 +39,7 @@ class GeminiClient:
             self.logger.error(f"設定 Gemini API 金鑰時發生錯誤: {e}")
             return False
     
-    async def grade_responses_batch(self, texts: List[str], rubric: str, question_id: int) -> List[float]:
+    async def grade_responses_batch(self, texts: List[str], rubric: str, question_id: int) -> tuple:
         """批次評分學生回答
         
         Args:
@@ -48,27 +48,41 @@ class GeminiClient:
             question_id: 問題編號
             
         Returns:
-            List[float]: 分數列表
+            tuple: (分數列表, AI風險列表)
         """
         if not self.model:
             raise ValueError("Gemini模型未初始化")
         
         scores = []
+        ai_risks = []
         
         for text in texts:
             try:
-                score = await self._grade_single_response(text, rubric, question_id)
+                score, ai_risk = await self._grade_single_response(text, rubric, question_id)
                 scores.append(score)
+                ai_risks.append(ai_risk)
             except Exception as e:
                 self.logger.error(f"評分單個回答失敗: {e}")
                 scores.append(0.0)
+                ai_risks.append(0)
         
-        return scores
+        return scores, ai_risks
     
-    async def _grade_single_response(self, text: str, rubric: str, question_id: int) -> float:
-        """評分單個學生回答"""
+    async def _grade_single_response(self, text: str, rubric: str, question_id: int) -> tuple:
+        """評分單個學生回答，同時返回分數和AI風險"""
         try:
-            prompt = PROMPT_TEMPLATE.format(rubric=rubric, answer=text)
+            # 構建正確的 prompt
+            grade_block = f"Then score this answer based on the rubric, returning an integer from 0‑10.\n\nRubric:\n{rubric}"
+            question = f"Question {question_id}"
+            
+            prompt = PROMPT_TEMPLATE.format(
+                grade_block=grade_block,
+                question=question,
+                answer=text
+            )
+            
+            self.logger.info(f"🤖 發送給 Gemini 的 Prompt (Q{question_id}):")
+            self.logger.info(f"📝 學生回答: {text[:100]}...")
             
             response = await asyncio.to_thread(
                 self.model.generate_content,
@@ -79,15 +93,20 @@ class GeminiClient:
                 )
             )
             
-            # 解析回應中的分數
-            score_text = response.text.strip()
-            score = self._extract_score_from_response(score_text)
+            # 記錄 AI 回應
+            response_text = response.text.strip()
+            self.logger.info(f"🤖 Gemini 回應 (Q{question_id}): {response_text}")
             
-            return score
+            # 解析回應中的分數和AI風險
+            score, ai_risk = self._extract_score_and_ai_risk_from_response(response_text)
+            self.logger.info(f"📊 解析出的分數 (Q{question_id}): {score}")
+            self.logger.info(f"🔍 解析出的AI風險 (Q{question_id}): {ai_risk}")
+            
+            return score, ai_risk
             
         except Exception as e:
             self.logger.error(f"評分失敗: {e}")
-            return 0.0
+            return 0.0, 0
     
     def _extract_score_from_response(self, response_text: str) -> float:
         """從Gemini回應中提取分數"""
@@ -119,6 +138,42 @@ class GeminiClient:
                 pass
         
         return 0.0
+    
+    def _extract_score_and_ai_risk_from_response(self, response_text: str) -> tuple:
+        """從Gemini回應中提取分數和AI風險"""
+        import re
+        import json
+        
+        score = 0.0
+        ai_risk = 0
+        
+        try:
+            # 嘗試解析JSON格式
+            json_match = re.search(r'\{.*?"ai_risk".*?"score".*?\}|\{.*?"score".*?"ai_risk".*?\}', response_text, re.DOTALL)
+            if json_match:
+                json_data = json.loads(json_match.group(0))
+                ai_risk = int(json_data.get('ai_risk', 0))
+                score = float(json_data.get('score', 0))
+                return score, ai_risk
+        except (json.JSONDecodeError, ValueError):
+            pass
+        
+        # 如果JSON解析失敗，分別提取數字
+        ai_risk_match = re.search(r'"ai_risk":\s*(\d+)', response_text)
+        if ai_risk_match:
+            ai_risk = int(ai_risk_match.group(1))
+        
+        score_match = re.search(r'"score":\s*([0-9.]+)', response_text)
+        if score_match:
+            score = float(score_match.group(1))
+        elif not score_match:
+            # 尋找任何數字作為分數
+            all_numbers = re.findall(r'\b([0-9.]+)\b', response_text)
+            if all_numbers:
+                score = float(all_numbers[-1])  # 取最後一個數字
+                score = min(score, 10.0)  # 限制最高分為10分
+        
+        return score, ai_risk
 
 
 # 保持向後相容的函數接口

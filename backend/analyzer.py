@@ -72,28 +72,31 @@ class AnalysisEngine:
             # 資料預處理
             processed_data = self.data_processor.preprocess_responses(df, col)
             
-            # 相似度檢測
+            # 相似度檢測 - 只使用本地方法
             if DO_SIMILARITY_CHECK:
                 similarity_results = await self._calculate_similarity_batch(
                     processed_data['texts'], 
                     processed_data['names'],
-                    use_genai=use_genai
+                    use_genai=False  # 強制使用本地方法
                 )
-                processed_data['similarity_flags'] = similarity_results['flags']
+                processed_data['similarity_scores'] = similarity_results['scores']
+                processed_data['similarity_matrix'] = similarity_results['matrix']
                 processed_data['similarity_info'] = similarity_results['info']
             
             # 批次評分
             if use_genai and self.gemini_client:
-                scores = await self._grade_responses_genai(processed_data, qid, log_callback)
+                scores, ai_risks = await self._grade_responses_genai(processed_data, qid, log_callback)
             else:
                 scores = self._grade_responses_local(processed_data, qid)
+                ai_risks = [0] * len(scores)  # 本地評分沒有AI風險評估
             
             # 創建結果數據框
             result_df = df.copy()
             result_df[f'Q{qid}_分數'] = scores
+            result_df[f'Q{qid}_AI風險'] = ai_risks
             
             if DO_SIMILARITY_CHECK:
-                result_df[f'Q{qid}_相似度標記'] = processed_data['similarity_flags']
+                result_df[f'Q{qid}_相似度分數'] = processed_data['similarity_scores']
             
             # 生成視覺化
             if len(processed_data['texts']) > 1:
@@ -141,7 +144,7 @@ class AnalysisEngine:
             }
     
     async def _grade_responses_genai(self, data: Dict[str, Any], qid: int, 
-                                   log_callback: callable = None) -> List[float]:
+                                   log_callback: callable = None) -> tuple:
         """使用GenAI評分回答
         
         Args:
@@ -150,7 +153,7 @@ class AnalysisEngine:
             log_callback: 日誌回調
             
         Returns:
-            List[float]: 分數列表
+            tuple: (分數列表, AI風險列表)
         """
         if not self.gemini_client:
             raise ValueError("Gemini客戶端未初始化")
@@ -158,16 +161,18 @@ class AnalysisEngine:
         texts = data['texts']
         rubric = RUBRICS.get(qid, "")
         scores = []
+        ai_risks = []
         
         # 批次處理
         for i in range(0, len(texts), BATCH_SIZE):
             batch_texts = texts[i:i + BATCH_SIZE]
             
             try:
-                batch_scores = await self.gemini_client.grade_responses_batch(
+                batch_scores, batch_ai_risks = await self.gemini_client.grade_responses_batch(
                     batch_texts, rubric, qid
                 )
                 scores.extend(batch_scores)
+                ai_risks.extend(batch_ai_risks)
                 
                 if log_callback:
                     log_callback(f"Q{qid} 批次 {i//BATCH_SIZE + 1} 完成")
@@ -176,9 +181,11 @@ class AnalysisEngine:
                 self.logger.error(f"批次評分失敗: {e}")
                 # 使用本地評分作為後備
                 fallback_scores = [self._estimate_score_local(text, qid) for text in batch_texts]
+                fallback_ai_risks = [0] * len(batch_texts)  # 本地評分沒有AI風險
                 scores.extend(fallback_scores)
+                ai_risks.extend(fallback_ai_risks)
         
-        return scores
+        return scores, ai_risks
     
     def _grade_responses_local(self, data: Dict[str, Any], qid: int) -> List[float]:
         """使用本地方法評分回答
@@ -206,13 +213,33 @@ class AnalysisEngine:
         if not text.strip():
             return 0.0
         
-        # 基於長度和關鍵詞的簡單評分
-        base_score = min(len(text.strip()) / 100, 1.0) * 5
+        text_clean = text.strip().lower()
+        
+        # 基於文本長度的基礎分數（更合理的範圍）
+        word_count = len(text_clean.split())
+        if word_count < 20:
+            base_score = 2.0  # 太短
+        elif word_count < 50:
+            base_score = 4.0  # 一般
+        elif word_count < 100:
+            base_score = 6.0  # 中等
+        elif word_count < 200:
+            base_score = 7.0  # 較好
+        else:
+            base_score = 8.0  # 很好
         
         # 問題特定的關鍵詞加分
         keywords_bonus = self._calculate_keywords_bonus(text, qid)
         
-        return min(base_score + keywords_bonus, 10.0)
+        # 檢查是否有結構化回答（列表、數字等）
+        structure_bonus = 0.0
+        if any(marker in text for marker in ['1.', '2.', '3.', '•', '-', 'advantage', 'disadvantage']):
+            structure_bonus = 0.5
+        
+        final_score = min(base_score + keywords_bonus + structure_bonus, 10.0)
+        
+        # 確保最低分不低於1分（如果有內容的話）
+        return max(final_score, 1.0) if text.strip() else 0.0
     
     def _calculate_keywords_bonus(self, text: str, qid: int) -> float:
         """計算關鍵詞加分
@@ -243,6 +270,58 @@ class AnalysisEngine:
         
         return min(bonus, 3.0)  # 最多3分加分
     
+    def _find_question_columns(self, df: pd.DataFrame, target_questions: List[int]) -> Dict[int, str]:
+        """尋找問題欄位，支援不同的命名格式
+        
+        Args:
+            df: 數據框
+            target_questions: 目標問題編號列表
+            
+        Returns:
+            Dict[int, str]: 問題編號到欄位名稱的映射
+        """
+        question_cols = {}
+        
+        for qid in target_questions:
+            # 嘗試不同的欄位命名模式
+            patterns = [
+                f'Q{qid}',  # 簡單格式: Q1, Q2
+                f'352902',  # Canvas問題ID格式 (Q1對應352902)
+                f'352903',  # Canvas問題ID格式 (Q2對應352903)
+                f'352904',  # 以此類推
+                f'352905',
+                f'352906',
+            ]
+            
+            # 特定的問題ID映射 (根據實際的Canvas ID)
+            canvas_id_map = {
+                1: '352902',
+                2: '352903',
+                3: '352904',
+                4: '352905',
+                11: '352906'
+            }
+            
+            # 優先使用Canvas ID映射
+            if qid in canvas_id_map:
+                canvas_id = canvas_id_map[qid]
+                for col in df.columns:
+                    if canvas_id in col and '10.' not in col:  # 排除分數欄位
+                        question_cols[qid] = col
+                        break
+            
+            # 如果沒找到，嘗試其他模式
+            if qid not in question_cols:
+                for pattern in patterns:
+                    for col in df.columns:
+                        if pattern in col and col not in question_cols.values():
+                            question_cols[qid] = col
+                            break
+                    if qid in question_cols:
+                        break
+        
+        return question_cols
+    
     async def analyze_complete_dataset(self, file_path: str, 
                                      log_callback: callable = None) -> Dict[str, Any]:
         """分析完整數據集
@@ -263,33 +342,43 @@ class AnalysisEngine:
             results = {}
             all_visualizations = {}
             
+            # 找出問題欄位 - 處理不同的欄位命名格式
+            question_cols = self._find_question_columns(df, TARGET_SCORE_Q)
+            
             # 處理每個問題
-            for qid in TARGET_SCORE_Q:
-                col = f'Q{qid}'
-                if col in df.columns:
-                    if log_callback:
-                        log_callback(f"開始處理 {col}")
-                    
-                    result_df = await self.process_question(df, qid, col, log_callback)
-                    results[f'Q{qid}'] = result_df
-                    
-                    # 收集視覺化結果
-                    if hasattr(result_df, 'attrs') and f'Q{qid}_visualization' in result_df.attrs:
-                        all_visualizations[f'Q{qid}'] = result_df.attrs[f'Q{qid}_visualization']
+            for qid, col in question_cols.items():
+                if log_callback:
+                    log_callback(f"開始處理 Q{qid} (欄位: {col[:50]}...)")
+                
+                result_df = await self.process_question(df, qid, col, log_callback)
+                results[f'Q{qid}'] = result_df
+                
+                # 收集視覺化結果
+                if hasattr(result_df, 'attrs') and f'Q{qid}_visualization' in result_df.attrs:
+                    all_visualizations[f'Q{qid}'] = result_df.attrs[f'Q{qid}_visualization']
             
             # 合併結果
             final_df = df.copy()  # 確保final_df總是被定義
             if results:
-                final_df = list(results.values())[0].copy()
-                for qid in TARGET_SCORE_Q[1:]:
-                    if f'Q{qid}' in results:
-                        score_col = f'Q{qid}_分數'
-                        if score_col in results[f'Q{qid}'].columns:
-                            final_df[score_col] = results[f'Q{qid}'][score_col]
-                        
-                        similarity_col = f'Q{qid}_相似度標記'
-                        if similarity_col in results[f'Q{qid}'].columns:
-                            final_df[similarity_col] = results[f'Q{qid}'][similarity_col]
+                # 從第一個結果開始構建final_df
+                first_result_key = list(results.keys())[0]
+                final_df = results[first_result_key].copy()
+                
+                # 合併其他問題的結果
+                for result_key, result_df in results.items():
+                    qid = int(result_key.replace('Q', ''))
+                    score_col = f'Q{qid}_分數'
+                    similarity_col = f'Q{qid}_相似度分數'
+                    ai_risk_col = f'Q{qid}_AI風險'
+                    
+                    if score_col in result_df.columns and score_col not in final_df.columns:
+                        final_df[score_col] = result_df[score_col]
+                    
+                    if similarity_col in result_df.columns and similarity_col not in final_df.columns:
+                        final_df[similarity_col] = result_df[similarity_col]
+                    
+                    if ai_risk_col in result_df.columns and ai_risk_col not in final_df.columns:
+                        final_df[ai_risk_col] = result_df[ai_risk_col]
             
             # 生成HTML報告
             html_report = await self.visualization.generate_enhanced_html_report(
