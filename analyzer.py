@@ -237,21 +237,158 @@ def load_exam(csv_path, log_callback):
     log_to_frontend(f"✅ 成功載入 {os.path.basename(csv_path)}，找到 {len(df)} 位學生與 {len(q_map)} 題問答。", log_callback)
     return df, q_map
 
-def calculate_similarity_flags(texts: list[str], hi=0.85, mid=0.70) -> list[int]:
-    """計算答案間的語意相似度"""
+def calculate_similarity_flags(texts: list[str], names: list[str] = None, hi=0.85, mid=0.70, min_length=50) -> list[int]:
+    """
+    計算答案間的語意相似度，檢測潛在抄襲
+    
+    Args:
+        texts: 學生答案列表
+        names: 學生姓名列表（可選）
+        hi: 高相似度閾值（預設 0.85）
+        mid: 中等相似度閾值（預設 0.70）
+        min_length: 最小文本長度閾值（預設 50 字符）
+    
+    Returns:
+        list[int]: 相似度標記 (0=無相似, 1=中等相似, 2=高度相似, -1=錯誤)
+    """
     if not DO_SIMILARITY_CHECK or len(texts) < 2:
         return [0] * len(texts)
+    
     try:
-        safe_texts = [t if t and t.strip() else " " for t in texts]
-        result = genai.embed_content(model="models/text-embedding-004", content=safe_texts, task_type="RETRIEVAL_DOCUMENT")
+        # 預處理文本
+        processed_texts = []
+        valid_indices = []
+        
+        for i, text in enumerate(texts):
+            if text and text.strip() and len(text.strip()) >= min_length:
+                # 簡單的文本清理
+                cleaned_text = text.strip()
+                # 移除多餘的空白字符
+                cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+                processed_texts.append(cleaned_text)
+                valid_indices.append(i)
+            else:
+                processed_texts.append(" ")
+                valid_indices.append(i)
+        
+        # 如果有效文本少於 2 個，跳過相似度檢查
+        valid_texts = [processed_texts[i] for i in range(len(processed_texts)) if len(processed_texts[i].strip()) >= min_length]
+        if len(valid_texts) < 2:
+            return [0] * len(texts)
+        
+        # 計算語意嵌入
+        result = genai.embed_content(
+            model="models/text-embedding-004", 
+            content=processed_texts, 
+            task_type="RETRIEVAL_DOCUMENT"
+        )
         embs = result['embedding']
+        
+        # 計算相似度矩陣
         sims = cosine_similarity(embs)
-        np.fill_diagonal(sims, 0)
-        max_sims = np.max(sims, axis=1)
-        return [2 if s >= hi else 1 if s >= mid else 0 for s in max_sims]
+        np.fill_diagonal(sims, 0)  # 設置對角線為 0，避免自己和自己比較
+        
+        # 分析相似度結果
+        similarity_flags = []
+        high_similarity_pairs = []
+        
+        for i in range(len(texts)):
+            if len(processed_texts[i].strip()) < min_length:
+                # 文本過短，不參與相似度檢查
+                similarity_flags.append(0)
+                continue
+                
+            max_sim = np.max(sims[i])
+            max_sim_idx = np.argmax(sims[i])
+            
+            # 確定相似度等級
+            if max_sim >= hi:
+                flag = 2
+                # 記錄高相似度配對
+                if names:
+                    pair_info = f"{names[i]} ↔ {names[max_sim_idx]} (相似度: {max_sim:.3f})"
+                else:
+                    pair_info = f"學生 {i+1} ↔ 學生 {max_sim_idx+1} (相似度: {max_sim:.3f})"
+                high_similarity_pairs.append(pair_info)
+            elif max_sim >= mid:
+                flag = 1
+            else:
+                flag = 0
+                
+            similarity_flags.append(flag)
+        
+        # 記錄高相似度配對到日誌
+        if high_similarity_pairs:
+            logging.warning(f"檢測到 {len(high_similarity_pairs)} 對高相似度答案:")
+            for pair in high_similarity_pairs:
+                logging.warning(f"  🚨 {pair}")
+        
+        return similarity_flags
+        
     except Exception as e:
         logging.error(f"執行相似度計算時發生錯誤: {e}")
         return [-1] * len(texts)
+
+def get_detailed_similarity_analysis(texts: list[str], names: list[str] = None, threshold=0.70):
+    """
+    取得詳細的相似度分析報告
+    
+    Args:
+        texts: 學生答案列表
+        names: 學生姓名列表（可選）
+        threshold: 相似度閾值
+    
+    Returns:
+        dict: 包含相似度矩陣和詳細分析的字典
+    """
+    if not DO_SIMILARITY_CHECK or len(texts) < 2:
+        return {"status": "skipped", "reason": "相似度檢查已關閉或文本數量不足"}
+    
+    try:
+        # 預處理文本（與上面的函數保持一致）
+        safe_texts = [t.strip() if t and t.strip() else " " for t in texts]
+        
+        # 計算嵌入向量
+        result = genai.embed_content(
+            model="models/text-embedding-004", 
+            content=safe_texts, 
+            task_type="RETRIEVAL_DOCUMENT"
+        )
+        embs = result['embedding']
+        
+        # 計算相似度矩陣
+        sims = cosine_similarity(embs)
+        np.fill_diagonal(sims, 0)
+        
+        # 找出高相似度配對
+        high_similarity_pairs = []
+        for i in range(len(texts)):
+            for j in range(i + 1, len(texts)):
+                if sims[i][j] >= threshold:
+                    student_i = names[i] if names else f"學生 {i+1}"
+                    student_j = names[j] if names else f"學生 {j+1}"
+                    high_similarity_pairs.append({
+                        "student_1": student_i,
+                        "student_2": student_j,
+                        "similarity": float(sims[i][j]),
+                        "index_1": i,
+                        "index_2": j
+                    })
+        
+        # 按相似度排序
+        high_similarity_pairs.sort(key=lambda x: x["similarity"], reverse=True)
+        
+        return {
+            "status": "completed",
+            "similarity_matrix": sims.tolist(),
+            "high_similarity_pairs": high_similarity_pairs,
+            "total_comparisons": len(texts) * (len(texts) - 1) // 2,
+            "flagged_pairs": len(high_similarity_pairs)
+        }
+        
+    except Exception as e:
+        logging.error(f"詳細相似度分析時發生錯誤: {e}")
+        return {"status": "error", "error": str(e)}
 
 async def gemini_eval(question: str, rubric: str, answer: str, need_score: bool) -> tuple:
     """非同步呼叫 Gemini API 進行 AI 風格分析與評分"""
@@ -289,7 +426,12 @@ async def process_question(df, qid, col, log_callback):
     rubric = RUBRICS.get(qid, "")
     
     sub = df[["name", col]].rename(columns={col: "answer"}).fillna("")
-    sub[f"Q{qid}_sim_flag"] = calculate_similarity_flags(sub["answer"].tolist())
+    
+    # 傳入學生姓名以便追蹤相似度配對
+    sub[f"Q{qid}_sim_flag"] = calculate_similarity_flags(
+        sub["answer"].tolist(), 
+        names=sub["name"].tolist()
+    )
     
     out_ai, out_sc = [], []
     chunks = [sub.iloc[i:i + BATCH_SIZE] for i in range(0, len(sub), BATCH_SIZE)]
