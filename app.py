@@ -47,9 +47,15 @@ class Api:
         """
         # 建立唯一的輸出檔案路徑
         output_dir = os.path.dirname(file_path)
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        output_path = os.path.join(output_dir, f"{base_name}_report.xlsx")
-        unique_output_path = self._get_unique_filepath(output_path)
+        base_input_name = os.path.splitext(os.path.basename(file_path))[0]
+        
+        # 為主要的 .xlsx 報告產生唯一的檔案路徑
+        xlsx_output_path = os.path.join(output_dir, f"{base_input_name}_report.xlsx")
+        unique_xlsx_output_path = self._get_unique_filepath(xlsx_output_path)
+        
+        # 從唯一的 .xlsx 路徑中提取不含副檔名的基本名稱 (例如 /path/to/file_report_1)
+        # 這個基本名稱將用於所有格式的報告檔案
+        unique_output_base_name = os.path.splitext(unique_xlsx_output_path)[0]
 
         # 每個執行緒都需要自己的 asyncio 事件循環
         loop = asyncio.new_event_loop()
@@ -57,7 +63,7 @@ class Api:
         
         try:
             # 執行非同步的分析主函式
-            loop.run_until_complete(run_analysis(api_key, file_path, unique_output_path, self._log_to_frontend))
+            loop.run_until_complete(run_analysis(api_key, file_path, unique_output_base_name, self._log_to_frontend))
         finally:
             loop.close()
             # 通知前端分析已完成

@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import google.generativeai as genai
 from sklearn.metrics.pairwise import cosine_similarity
+import yaml # 新增匯入 yaml
 
 # --- Gemini API 設定 ---
 def configure_gemini(api_key):
@@ -60,12 +61,47 @@ def log_to_frontend(message, callback):
 def load_exam(csv_path, log_callback):
     """從 CSV 檔案載入考卷答案"""
     try:
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(
+            csv_path,
+            encoding='utf-8',
+            dtype=str,
+            quotechar='"',
+            escapechar='\\'
+        )
+        # 去除欄位名稱前後空白，並將換行轉為空格
+        df.columns = (
+            df.columns
+            .str.strip()
+            .str.replace('\n', ' ', regex=False)
+        )
     except FileNotFoundError:
         log_to_frontend(f"❌ 找不到指定的檔案: {csv_path}", log_callback)
         return None, None
-    ans_cols = [c for c in df.columns if re.match(r'^(352|362)\d+:', str(c))]
-    q_map = {i+1: col for i, col in enumerate(ans_cols)}
+    
+    # 找到結構標記欄位的索引
+    try:
+        attempt_idx = df.columns.get_loc('attempt')
+        n_correct_idx = df.columns.get_loc('n correct')
+    except KeyError as e:
+        log_to_frontend(f"❌ 找不到必要的欄位: {e}，請檢查CSV格式", log_callback)
+        return None, None
+    
+    # 解析attempt和n correct之間的題目/分數配對
+    q_map = {}
+    q_counter = 1
+    
+    for i in range(attempt_idx + 1, n_correct_idx, 2):
+        if i + 1 < n_correct_idx:  # 確保有配對的分數欄位
+            question_col = df.columns[i]
+            score_col = df.columns[i + 1]
+            
+            # 檢查分數欄位是否為數值型態或包含分數資訊
+            if (pd.to_numeric(df[score_col], errors='coerce').notna().any() or 
+                any(str(val).replace('.', '').isdigit() for val in df[score_col].dropna())):
+                q_map[q_counter] = question_col
+                q_counter += 1
+                log_to_frontend(f"  找到題目 {q_counter-1}: {question_col[:50]}...", log_callback)
+    
     log_to_frontend(f"✅ 成功載入 {os.path.basename(csv_path)}，找到 {len(df)} 位學生與 {len(q_map)} 題問答。", log_callback)
     return df, q_map
 
@@ -130,7 +166,7 @@ async def process_question(df, qid, col, log_callback):
         
     return sub.drop(columns=["answer"])
 
-async def run_analysis(api_key: str, csv_path: str, out_path: str, log_callback):
+async def run_analysis(api_key: str, csv_path: str, out_base_path: str, log_callback):
     """執行完整分析流程的主函式"""
     if not configure_gemini(api_key):
         log_to_frontend("❌ API 金鑰設定失敗，請檢查金鑰是否正確。", log_callback)
@@ -145,8 +181,53 @@ async def run_analysis(api_key: str, csv_path: str, out_path: str, log_callback)
         res_df = await process_question(df, qid, col, log_callback)
         merged_df = merged_df.merge(res_df, on="name", how="left")
         
+    # 定義各種格式的輸出路徑
+    xlsx_path = f"{out_base_path}.xlsx"
+    csv_path_out = f"{out_base_path}.csv"
+    yaml_path = f"{out_base_path}.yaml"
+    html_path = f"{out_base_path}.html"
+
     try:
-        merged_df.to_excel(out_path, index=False, engine='openpyxl')
-        log_to_frontend(f"🎉 分析完成！報告已儲存至：\n{out_path}")
+        # 儲存為 Excel
+        merged_df.to_excel(xlsx_path, index=False, engine='openpyxl')
+        log_to_frontend(f"🎉 Excel 報告已儲存至：\n{xlsx_path}", log_callback)
+
+        # 儲存為 CSV
+        merged_df.to_csv(csv_path_out, index=False)
+        log_to_frontend(f"🎉 CSV 報告已儲存至：\n{csv_path_out}", log_callback)
+
+        # 儲存為 YAML
+        # 將 DataFrame 轉換為字典列表以便 YAML 序列化
+        yaml_data = merged_df.to_dict(orient='records')
+        with open(yaml_path, 'w', encoding='utf-8') as f:
+            yaml.dump(yaml_data, f, allow_unicode=True, sort_keys=False)
+        log_to_frontend(f"🎉 YAML 報告已儲存至：\n{yaml_path}", log_callback)
+
+        # 儲存為 HTML
+        # 使用 DataFrame.to_html() 方法，可以加入一些樣式
+        html_content = merged_df.to_html(index=False, escape=False, classes='table table-striped')
+        # 可以選擇性地加入一些基本的 HTML 結構和 CSS 樣式
+        html_output = f"""
+        <html>
+        <head>
+            <title>分析報告</title>
+            <style>
+                body {{ font-family: sans-serif; margin: 20px; }}
+                .table {{ width: 100%; border-collapse: collapse; }}
+                .table th, .table td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                .table th {{ background-color: #f2f2f2; }}
+                .table-striped tbody tr:nth-of-type(odd) {{ background-color: #f9f9f9; }}
+            </style>
+        </head>
+        <body>
+            <h1>分析報告</h1>
+            {html_content}
+        </body>
+        </html>
+        """
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html_output)
+        log_to_frontend(f"🎉 HTML 報告已儲存至：\n{html_path}", log_callback)
+
     except Exception as e:
-        log_to_frontend(f"❌ 儲存 Excel 報告失敗: {e}", log_callback)
+        log_to_frontend(f"❌ 儲存報告失敗: {e}", log_callback)
