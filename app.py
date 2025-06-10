@@ -34,42 +34,91 @@ class Api:
             new_path = os.path.join(directory, f"{name}_{counter}{ext}")
         return new_path
 
-    def start_analysis(self, api_key, file_path):
+    def select_file(self):
+        """
+        開啟檔案選擇對話框
+        """
+        file_types = ('CSV Files (*.csv)', 'All files (*.*)')
+        result = self.window.create_file_dialog(
+            webview.OPEN_DIALOG,
+            allow_multiple=False,
+            file_types=file_types
+        )
+        if result and len(result) > 0:
+            return result[0]  # 返回選擇的檔案路徑
+        return None
+
+    def start_analysis(self, params):
         """
         由前端呼叫，在一個獨立的執行緒中開始分析，以避免 GUI 凍結。
         """
+        api_key = params.get('apiKey', '').strip()
+        file_path = params.get('filePath', '').strip()
+        
+        # 輸入驗證
+        if not api_key:
+            self._log_to_frontend("❌ 請先輸入 API 金鑰。")
+            return {"status": "error", "message": "API 金鑰未提供"}
+        
+        # 如果沒有提供檔案路徑，使用預設測試檔案
+        if not file_path:
+            default_file = os.path.join(os.path.dirname(__file__), 'testfile', 'Final Exam Quiz Student Analysis Report_Public.csv')
+            if os.path.exists(default_file):
+                file_path = default_file
+                self._log_to_frontend(f"📁 使用預設測試檔案: {os.path.basename(default_file)}")
+            else:
+                self._log_to_frontend("❌ 請先選擇或拖曳 CSV 檔案。")
+                return {"status": "error", "message": "檔案路徑未提供"}
+        
+        # 檢查檔案是否存在
+        if not os.path.exists(file_path):
+            self._log_to_frontend(f"❌ 找不到檔案: {file_path}")
+            return {"status": "error", "message": "檔案不存在"}
+        
+        # 檢查檔案是否為 CSV
+        if not file_path.lower().endswith('.csv'):
+            self._log_to_frontend("❌ 請選擇 CSV 格式的檔案。")
+            return {"status": "error", "message": "檔案格式不正確"}
+            
+        self._log_to_frontend(f"🚀 開始分析檔案: {os.path.basename(file_path)}")
+        
         thread = threading.Thread(target=self._run_analysis_in_thread, args=(api_key, file_path))
         thread.start()
+        
+        return {"status": "success", "message": "分析已開始"}
 
     def _run_analysis_in_thread(self, api_key, file_path):
         """
         執行緒的目標函式。它會設定一個新的 asyncio 事件循環，並執行分析任務。
         """
-        # 建立唯一的輸出檔案路徑
-        output_dir = os.path.dirname(file_path)
-        base_input_name = os.path.splitext(os.path.basename(file_path))[0]
-        
-        # 為主要的 .xlsx 報告產生唯一的檔案路徑
-        xlsx_output_path = os.path.join(output_dir, f"{base_input_name}_report.xlsx")
-        unique_xlsx_output_path = self._get_unique_filepath(xlsx_output_path)
-        
-        # 從唯一的 .xlsx 路徑中提取不含副檔名的基本名稱 (例如 /path/to/file_report_1)
-        # 這個基本名稱將用於所有格式的報告檔案
-        unique_output_base_name = os.path.splitext(unique_xlsx_output_path)[0]
-
-        # 每個執行緒都需要自己的 asyncio 事件循環
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
         try:
-            # 執行非同步的分析主函式
-            loop.run_until_complete(run_analysis(api_key, file_path, unique_output_base_name, self._log_to_frontend))
-        finally:
-            loop.close()
-            # 通知前端分析已完成
-            if self.window:
-                self.window.evaluate_js('analysis_complete()')
-    
+            # 建立唯一的輸出檔案路徑
+            output_dir = os.path.dirname(file_path)
+            base_input_name = os.path.splitext(os.path.basename(file_path))[0]
+            
+            # 為主要的 .xlsx 報告產生唯一的檔案路徑
+            xlsx_output_path = os.path.join(output_dir, f"{base_input_name}_report.xlsx")
+            unique_xlsx_output_path = self._get_unique_filepath(xlsx_output_path)
+            
+            # 從唯一的 .xlsx 路徑中提取不含副檔名的基本名稱 (例如 /path/to/file_report_1)
+            # 這個基本名稱將用於所有格式的報告檔案
+            unique_output_base_name = os.path.splitext(unique_xlsx_output_path)[0]
+
+            # 每個執行緒都需要自己的 asyncio 事件循環
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                # 執行非同步的分析主函式
+                loop.run_until_complete(run_analysis(api_key, file_path, unique_output_base_name, self._log_to_frontend))
+                self._log_to_frontend("✅ 分析完成！")
+            finally:
+                loop.close()
+                # 通知前端分析已完成
+                if self.window:
+                    self.window.evaluate_js('analysis_complete()')
+        except Exception as e:
+            self._log_to_frontend(f"❌ 分析過程中發生錯誤: {str(e)}")
     def _log_to_frontend(self, message: str):
         """
         一個簡單的回呼函式，用於從後端傳遞字串訊息到前端。

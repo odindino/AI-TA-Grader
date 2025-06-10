@@ -142,6 +142,28 @@ label {
     transform: scale(0.98);
 }
 
+/* 檔案選擇按鈕樣式 */
+.file-select-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background-color 0.3s, transform 0.1s;
+}
+
+.file-select-btn:hover {
+    background-color: var(--primary-hover);
+}
+
+.file-select-btn:active {
+    transform: scale(0.95);
+}
+
 .log-container {
     margin-top: 25px;
     text-align: left;

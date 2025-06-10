@@ -52,6 +52,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         test_file = sys.argv[1]
     else:
-        test_file = "testfile/structure_test.csv"
+        test_file = "testfile/Final Exam Quiz Student Analysis Report_Public.csv"
     
     test_csv_parsing(test_file)

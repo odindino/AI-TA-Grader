@@ -11,11 +11,34 @@ window.addEventListener('pywebviewready', () => {
 
     // 檢查是否所有必要輸入都已備妥，並更新按鈕狀態
     const checkButtonState = () => {
-        const isReady = apiKeyInput.value.trim() && selectedFile;
+        const isReady = apiKeyInput.value.trim();
         startButton.disabled = !isReady;
     };
 
     apiKeyInput.addEventListener('input', checkButtonState);
+
+    // --- 檔案選擇按鈕事件 ---
+    const selectFileButton = document.createElement('button');
+    selectFileButton.textContent = '選擇檔案';
+    selectFileButton.className = 'file-select-btn';
+    selectFileButton.addEventListener('click', async () => {
+        try {
+            const filePath = await window.pywebview.api.select_file();
+            if (filePath) {
+                const fileName = filePath.split(/[/\\]/).pop();
+                selectedFile = { path: filePath, name: fileName };
+                dropZoneText.textContent = `已選擇檔案：${fileName}`;
+                dropZone.style.borderColor = 'var(--success-color)';
+            }
+        } catch (error) {
+            console.error('檔案選擇錯誤:', error);
+            appendToLog('檔案選擇失敗，請重試。');
+        }
+        checkButtonState();
+    });
+
+    // 將選擇檔案按鈕添加到拖曳區域
+    dropZone.appendChild(selectFileButton);
 
     // --- 拖曳區域事件處理 ---
     dropZone.addEventListener('dragover', (e) => {
@@ -53,10 +76,10 @@ window.addEventListener('pywebviewready', () => {
     });
 
     // --- 開始按鈕點擊事件 ---
-    startButton.addEventListener('click', () => {
+    startButton.addEventListener('click', async () => {
         const apiKey = apiKeyInput.value.trim();
-        if (!apiKey || !selectedFile) {
-            alert('請確認已輸入 API 金鑰並選擇了 CSV 檔案。');
+        if (!apiKey) {
+            alert('請輸入 API 金鑰。');
             return;
         }
 
@@ -64,10 +87,29 @@ window.addEventListener('pywebviewready', () => {
         startButton.disabled = true;
         startButtonText.textContent = '分析中，請稍候...';
         clearLog();
-        appendToLog('🚀 初始化分析流程...');
-
-        // 呼叫 Python 後端函式
-        window.pywebview.api.start_analysis(apiKey, selectedFile.path);
+        
+        const filePath = selectedFile ? selectedFile.path : '';
+        
+        try {
+            // 呼叫 Python 後端函式 (新版 API)
+            const result = await window.pywebview.api.start_analysis({ 
+                apiKey: apiKey, 
+                filePath: filePath 
+            });
+            
+            if (result.status === 'error') {
+                appendToLog(`❌ ${result.message}`);
+                startButtonText.textContent = '開始分析';
+                startButton.disabled = false;
+            } else {
+                appendToLog('🚀 分析已開始...');
+            }
+        } catch (error) {
+            console.error('分析啟動錯誤:', error);
+            appendToLog('❌ 分析啟動失敗，請檢查API金鑰和檔案。');
+            startButtonText.textContent = '開始分析';
+            startButton.disabled = false;
+        }
     });
 });
 

@@ -14,7 +14,7 @@ def configure_gemini(api_key):
     global gmodel
     try:
         genai.configure(api_key=api_key)
-        gmodel = genai.GenerativeModel("gemini-1.5-pro-latest")
+        gmodel = genai.GenerativeModel("gemini-2.5-pro-latest")
         return True
     except Exception as e:
         logging.error(f"設定 Gemini API 金鑰時發生錯誤: {e}")
