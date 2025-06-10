@@ -59,7 +59,7 @@ label {
     font-weight: 600;
 }
 
-#api-key {
+#api-key, #model-select {
     width: 100%;
     padding: 12px;
     border: 1px solid var(--border-color);
@@ -69,10 +69,22 @@ label {
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-#api-key:focus {
+#api-key:focus, #model-select:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.25);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+}
+
+#model-select {
+    color: var(--text-color);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+}
+
+#model-select option {
+    padding: 8px;
+    background-color: var(--container-bg);
+    color: var(--text-color);
 }
 
 #drop-zone {

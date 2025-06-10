@@ -9,12 +9,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 import yaml # 新增匯入 yaml
 
 # --- Gemini API 設定 ---
-def configure_gemini(api_key):
+def configure_gemini(api_key, model_name="gemini-1.5-pro-latest"):
     """設定 Gemini API 金鑰並初始化模型"""
     global gmodel
     try:
         genai.configure(api_key=api_key)
-        gmodel = genai.GenerativeModel("gemini-2.5-pro-latest")
+        gmodel = genai.GenerativeModel(model_name)
         return True
     except Exception as e:
         logging.error(f"設定 Gemini API 金鑰時發生錯誤: {e}")
@@ -165,8 +165,49 @@ def load_exam(csv_path, log_callback):
             .str.strip()
             .str.replace('\n', ' ', regex=False)
         )
+        
+        log_to_frontend(f"📊 原始檔案載入: {len(df)} 行", log_callback)
+        
+        # 檢查是否有 'name' 欄位
+        if 'name' not in df.columns:
+            log_to_frontend("❌ 找不到 'name' 欄位，請檢查CSV格式", log_callback)
+            return None, None
+            
+        # 去除重複的學生記錄，優先保留最高分數的記錄
+        original_count = len(df)
+        
+        # 檢查是否有 score 欄位來判斷最高分
+        if 'score' in df.columns:
+            # 將分數轉換為數值型態
+            df['score_numeric'] = pd.to_numeric(df['score'], errors='coerce').fillna(0)
+            # 根據姓名分組，保留每組中分數最高的記錄
+            df = df.loc[df.groupby('name')['score_numeric'].idxmax()]
+            df = df.drop(columns=['score_numeric'])  # 移除臨時欄位
+            log_to_frontend("📊 保留策略: 每位學生保留最高分數的記錄", log_callback)
+        else:
+            # 如果沒有分數欄位，則保留第一次出現的記錄
+            df = df.drop_duplicates(subset=['name'], keep='first')
+            log_to_frontend("📊 保留策略: 每位學生保留第一次記錄", log_callback)
+        
+        deduplicated_count = len(df)
+        
+        if original_count != deduplicated_count:
+            removed_count = original_count - deduplicated_count
+            log_to_frontend(f"🔄 去除重複記錄: {removed_count} 個重複作答，保留 {deduplicated_count} 位學生", log_callback)
+        
+        # 去除姓名為空的行
+        df = df.dropna(subset=['name'])
+        df = df[df['name'].str.strip() != '']
+        final_count = len(df)
+        
+        if deduplicated_count != final_count:
+            log_to_frontend(f"🧹 已移除空白姓名: {deduplicated_count} -> {final_count} 行", log_callback)
+            
     except FileNotFoundError:
         log_to_frontend(f"❌ 找不到指定的檔案: {csv_path}", log_callback)
+        return None, None
+    except Exception as e:
+        log_to_frontend(f"❌ 讀取CSV檔案時發生錯誤: {e}", log_callback)
         return None, None
     
     # 找到結構標記欄位的索引
@@ -216,7 +257,16 @@ async def gemini_eval(question: str, rubric: str, answer: str, need_score: bool)
     """非同步呼叫 Gemini API 進行 AI 風格分析與評分"""
     if not answer or not answer.strip():
         return (0, 0 if need_score else None)
-    grade_block = f"Then grade the answer..." if need_score else "Grading is not required..."
+    
+    if need_score:
+        grade_block = f"""Then grade the answer based on this rubric (return an integer score 0-10):
+
+{rubric}
+
+Grade the answer objectively according to the rubric criteria."""
+    else:
+        grade_block = "Grading is not required for this question."
+    
     prompt = PROMPT_TEMPLATE.format(question=question, answer=answer, grade_block=grade_block)
     try:
         resp = await gmodel.generate_content_async(
@@ -257,11 +307,13 @@ async def process_question(df, qid, col, log_callback):
         
     return sub.drop(columns=["answer"])
 
-async def run_analysis(api_key: str, csv_path: str, out_base_path: str, log_callback):
+async def run_analysis(api_key: str, csv_path: str, out_base_path: str, log_callback, model_name: str = "gemini-1.5-pro-latest"):
     """執行完整分析流程的主函式"""
-    if not configure_gemini(api_key):
+    if not configure_gemini(api_key, model_name):
         log_to_frontend("❌ API 金鑰設定失敗，請檢查金鑰是否正確。", log_callback)
         return
+
+    log_to_frontend(f"🤖 使用模型: {model_name}", log_callback)
 
     df, qmap = load_exam(csv_path, log_callback)
     if df is None: return

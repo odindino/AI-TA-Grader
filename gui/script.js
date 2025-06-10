@@ -4,6 +4,7 @@ let selectedFile = null;
 // 當 pywebview API 準備就緒時，初始化所有事件監聽器
 window.addEventListener('pywebviewready', () => {
     const apiKeyInput = document.getElementById('api-key');
+    const modelSelect = document.getElementById('model-select');
     const dropZone = document.getElementById('drop-zone');
     const dropZoneText = document.getElementById('drop-zone-text');
     const startButton = document.getElementById('start-button');
@@ -78,6 +79,8 @@ window.addEventListener('pywebviewready', () => {
     // --- 開始按鈕點擊事件 ---
     startButton.addEventListener('click', async () => {
         const apiKey = apiKeyInput.value.trim();
+        const selectedModel = modelSelect.value;
+        
         if (!apiKey) {
             alert('請輸入 API 金鑰。');
             return;
@@ -94,7 +97,8 @@ window.addEventListener('pywebviewready', () => {
             // 呼叫 Python 後端函式 (新版 API)
             const result = await window.pywebview.api.start_analysis({ 
                 apiKey: apiKey, 
-                filePath: filePath 
+                filePath: filePath,
+                modelName: selectedModel
             });
             
             if (result.status === 'error') {

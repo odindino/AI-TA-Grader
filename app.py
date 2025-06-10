@@ -48,12 +48,32 @@ class Api:
             return result[0]  # 返回選擇的檔案路徑
         return None
 
+    def get_available_models(self):
+        """取得可用的 Gemini 模型列表"""
+        try:
+            # 推薦的模型列表 (基於檢查結果)
+            recommended_models = [
+                "gemini-1.5-pro-latest",
+                "gemini-1.5-pro-002", 
+                "gemini-1.5-flash-latest",
+                "gemini-1.5-flash-002",
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-001",
+                "gemini-2.0-pro-exp",
+                "gemini-2.5-pro-preview-06-05",
+                "gemini-exp-1206"
+            ]
+            return {"status": "success", "models": recommended_models}
+        except Exception as e:
+            return {"status": "error", "message": f"無法獲取模型列表: {str(e)}"}
+
     def start_analysis(self, params):
         """
         由前端呼叫，在一個獨立的執行緒中開始分析，以避免 GUI 凍結。
         """
         api_key = params.get('apiKey', '').strip()
         file_path = params.get('filePath', '').strip()
+        model_name = params.get('modelName', 'gemini-1.5-pro-latest').strip()
         
         # 輸入驗證
         if not api_key:
@@ -81,13 +101,14 @@ class Api:
             return {"status": "error", "message": "檔案格式不正確"}
             
         self._log_to_frontend(f"🚀 開始分析檔案: {os.path.basename(file_path)}")
+        self._log_to_frontend(f"🤖 使用模型: {model_name}")
         
-        thread = threading.Thread(target=self._run_analysis_in_thread, args=(api_key, file_path))
+        thread = threading.Thread(target=self._run_analysis_in_thread, args=(api_key, file_path, model_name))
         thread.start()
         
         return {"status": "success", "message": "分析已開始"}
 
-    def _run_analysis_in_thread(self, api_key, file_path):
+    def _run_analysis_in_thread(self, api_key, file_path, model_name):
         """
         執行緒的目標函式。它會設定一個新的 asyncio 事件循環，並執行分析任務。
         """
@@ -110,7 +131,7 @@ class Api:
             
             try:
                 # 執行非同步的分析主函式
-                loop.run_until_complete(run_analysis(api_key, file_path, unique_output_base_name, self._log_to_frontend))
+                loop.run_until_complete(run_analysis(api_key, file_path, unique_output_base_name, self._log_to_frontend, model_name))
                 self._log_to_frontend("✅ 分析完成！")
             finally:
                 loop.close()
