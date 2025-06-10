@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI 助教考卷分析工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI 助教考卷分析工具 🎓</h1>
+            <p>請輸入您的 Gemini API 金鑰，並將考卷答案 CSV 檔拖曳至下方區域。</p>
+        </header>
+
+        <main>
+            <div class="form-group">
+                <label for="api-key">Gemini API Key</label>
+                <input type="password" id="api-key" placeholder="請在此貼上您的 sk- 或 pk- 開頭金鑰">
+            </div>
+
+            <div id="drop-zone">
+                <div id="drop-zone-content">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-upload-cloud"><polyline points="16 16 12 12 8 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 15.3"></path><polyline points="16 16 12 12 8 16"></polyline></svg>
+                    <p id="drop-zone-text">請將 CSV 檔案拖曳至此</p>
+                </div>
+            </div>
+
+            <button id="start-button" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>開始分析</span>
+            </button>
+
+            <div class="log-container">
+                <h3>處理日誌：</h3>
+                <pre id="log-output"></pre>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

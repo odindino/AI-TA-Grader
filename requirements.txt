@@ -1,0 +1,6 @@
+pywebview
+pandas
+numpy
+scikit-learn
+google-generativeai
+openpyxl

@@ -1,0 +1,23 @@
+# Conda 環境設定檔 for AI-TA-Grader
+#
+# 如何使用:
+# 1. 安裝 Anaconda 或 Miniconda
+# 2. 在終端機中，導航到專案根目錄
+# 3. 執行: conda env create -f environment.yml
+# 4. 啟用環境: conda activate ai-ta-grader
+
+name: ai-ta-grader
+channels:
+  - defaults
+  - conda-forge
+  - anaconda
+dependencies:
+  - python>=3.12
+  - pip
+  - pandas
+  - numpy
+  - scikit-learn
+  - openpyxl
+  - pip:
+    - pywebview
+    - google-generativeai

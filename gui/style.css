@@ -1,0 +1,163 @@
+:root {
+    --primary-color: #4a90e2;
+    --primary-hover: #357ABD;
+    --background-color: #f8f9fa;
+    --container-bg: #ffffff;
+    --text-color: #343a40;
+    --subtle-text: #6c757d;
+    --border-color: #dee2e6;
+    --drop-zone-border: #adb5bd;
+    --success-color: #28a745;
+    --error-color: #dc3545;
+    --log-bg: #212529;
+    --log-text: #e9ecef;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+.container {
+    background: var(--container-bg);
+    padding: 30px 40px;
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 650px;
+    text-align: center;
+}
+
+header h1 {
+    color: var(--text-color);
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+header p {
+    color: var(--subtle-text);
+    line-height: 1.6;
+    max-width: 90%;
+    margin: 0 auto 25px auto;
+}
+
+.form-group {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+#api-key {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 16px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#api-key:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.25);
+}
+
+#drop-zone {
+    border: 2px dashed var(--drop-zone-border);
+    border-radius: 12px;
+    padding: 30px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    margin-bottom: 25px;
+}
+
+#drop-zone.drag-over {
+    background-color: #e9f2fc;
+    border-color: var(--primary-color);
+}
+
+#drop-zone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--subtle-text);
+    pointer-events: none; /* 讓 drop 事件能正確觸發 */
+}
+
+#drop-zone-content svg {
+    stroke: var(--subtle-text);
+    transition: stroke 0.2s;
+}
+
+#drop-zone.drag-over svg {
+    stroke: var(--primary-color);
+}
+
+#drop-zone p {
+    margin: 0;
+    font-weight: 500;
+}
+
+#start-button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 14px 28px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+    transition: background-color 0.3s, transform 0.1s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+}
+
+#start-button:disabled {
+    background-color: #ced4da;
+    cursor: not-allowed;
+}
+
+#start-button:not(:disabled):hover {
+    background-color: var(--primary-hover);
+}
+
+#start-button:not(:disabled):active {
+    transform: scale(0.98);
+}
+
+.log-container {
+    margin-top: 25px;
+    text-align: left;
+    background-color: var(--log-bg);
+    color: var(--log-text);
+    padding: 15px;
+    border-radius: 8px;
+    height: 250px;
+    overflow-y: auto;
+    font-family: "SF Mono", "Fira Code", "Courier New", monospace;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+#log-output {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+    font-size: 14px;
+}
