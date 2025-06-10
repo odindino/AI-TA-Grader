@@ -134,24 +134,55 @@ class VisualizationEngine:
                     elif i == j:
                         local_similarity_matrix[i][j] = 1.0
             
-            # 創建本地矩陣視覺化
-            plt.figure(figsize=(10, 8))
-            mask = np.triu(np.ones_like(local_similarity_matrix, dtype=bool))  # 只顯示下三角
-            sns.heatmap(local_similarity_matrix,
-                       mask=mask, 
-                       annot=True, 
-                       fmt='.3f',
-                       cmap='Blues',
-                       xticklabels=labels,
-                       yticklabels=labels,
-                       cbar_kws={'label': '相似度'})
+            # 創建本地矩陣視覺化（根據學生數量調整尺寸）
+            n = len(texts)
+            if n > 20:
+                fig_size = (max(12, n * 0.4), max(10, n * 0.4))
+                font_size = 6
+                rotation_angle = 90
+                annot = n <= 25  # 太多學生時不顯示數字
+            elif n > 15:
+                fig_size = (12, 10)
+                font_size = 8
+                rotation_angle = 60
+                annot = True
+            else:
+                fig_size = (10, 8)
+                font_size = 10
+                rotation_angle = 45
+                annot = True
             
-            plt.title(f'Q{question_id} - 非GenAI多算法相似度矩陣', fontsize=14, pad=20)
+            plt.figure(figsize=fig_size)
+            mask = np.triu(np.ones_like(local_similarity_matrix, dtype=bool))  # 只顯示下三角
+            
+            # 設定 heatmap 參數
+            heatmap_kwargs = {
+                'mask': mask,
+                'annot': annot,
+                'fmt': '.2f' if n > 15 else '.3f',
+                'cmap': 'Blues',
+                'xticklabels': labels,
+                'yticklabels': labels,
+                'cbar_kws': {'label': '相似度'},
+                'square': True
+            }
+            
+            if annot:
+                heatmap_kwargs['annot_kws'] = {'size': font_size}
+            
+            sns.heatmap(local_similarity_matrix, **heatmap_kwargs)
+            
+            plt.title(f'Q{question_id} - 相似度分析矩陣 ({n}位學生)', fontsize=14, pad=20)
             plt.xlabel('學生', fontsize=12)
             plt.ylabel('學生', fontsize=12)
-            plt.xticks(rotation=45, ha='right')
-            plt.yticks(rotation=0)
-            plt.tight_layout()
+            plt.xticks(rotation=rotation_angle, ha='right', fontsize=font_size)
+            plt.yticks(rotation=0, fontsize=font_size)
+            
+            # 調整布局以適應不同尺寸
+            if n > 20:
+                plt.subplots_adjust(bottom=0.2, left=0.15)
+            else:
+                plt.tight_layout()
             
             # 轉為base64
             buffer = BytesIO()
@@ -229,6 +260,11 @@ class VisualizationEngine:
                 </div>
                 
                 <div class="summary">
+                    <h2>📈 相似度矩陣數據表</h2>
+                    {similarity_matrix_table}
+                </div>
+                
+                <div class="summary">
                     <h2>🤖 AI 分析詳細記錄</h2>
                     {ai_logs}
                 </div>
@@ -270,6 +306,9 @@ class VisualizationEngine:
             # 生成相似度表格
             similarity_table = self._generate_similarity_table(df)
             
+            # 生成相似度矩陣表格
+            similarity_matrix_table = self._generate_similarity_matrix_table(visualizations, df)
+            
             # 生成數據表 - 只顯示重要欄位
             important_cols = ['name'] + [col for col in df.columns if '_分數' in col or '_相似度分數' in col or '_AI風險' in col]
             display_df = df[important_cols] if all(col in df.columns for col in important_cols) else df
@@ -284,6 +323,7 @@ class VisualizationEngine:
                 ai_risk_table=ai_risk_table,
                 content_sections=content_sections,
                 similarity_table=similarity_table,
+                similarity_matrix_table=similarity_matrix_table,
                 ai_logs=ai_logs,
                 data_table=data_table
             )
@@ -470,5 +510,88 @@ class VisualizationEngine:
         except Exception as e:
             self.logger.error(f"生成相似度表格失敗: {e}")
             return "<p>相似度表格生成失敗</p>"
+    
+    def _generate_similarity_matrix_table(self, visualizations: Dict[str, Any], df: pd.DataFrame) -> str:
+        """生成相似度矩陣數據表"""
+        try:
+            if not visualizations:
+                return "<p>無相似度矩陣數據</p>"
+            
+            table_html = ""
+            
+            for question_id, viz_data in visualizations.items():
+                if 'matrix_data' in viz_data:
+                    matrix = viz_data['matrix_data']
+                    names = viz_data.get('names', [])
+                    
+                    table_html += f"""
+                    <h3>{question_id} 相似度矩陣數據</h3>
+                    <div style="overflow-x: auto; margin-bottom: 30px;">
+                        <table style="border-collapse: collapse; margin: 10px 0;">
+                            <thead>
+                                <tr style="background-color: #f0f0f0;">
+                                    <th style="border: 1px solid #ddd; padding: 4px; font-size: 12px;">學生</th>
+                    """
+                    
+                    # 添加列標題
+                    for i, name in enumerate(names):
+                        short_name = name[:6] + "..." if len(name) > 6 else name
+                        table_html += f'<th style="border: 1px solid #ddd; padding: 4px; font-size: 10px; min-width: 50px;">{short_name}</th>'
+                    
+                    table_html += "</tr></thead><tbody>"
+                    
+                    # 添加數據行
+                    for i, name in enumerate(names):
+                        table_html += "<tr>"
+                        short_name = name[:6] + "..." if len(name) > 6 else name
+                        table_html += f'<td style="border: 1px solid #ddd; padding: 4px; font-size: 10px; background-color: #f9f9f9;">{short_name}</td>'
+                        
+                        for j in range(len(names)):
+                            if i == j:
+                                # 對角線
+                                table_html += '<td style="border: 1px solid #ddd; padding: 4px; text-align: center; background-color: #e0e0e0; font-size: 10px;">1.00</td>'
+                            elif i > j:
+                                # 下三角（顯示數值）
+                                value = matrix[i][j] if i < len(matrix) and j < len(matrix[i]) else 0
+                                color = self._get_similarity_color(value)
+                                table_html += f'<td style="border: 1px solid #ddd; padding: 4px; text-align: center; background-color: {color}; font-size: 10px;">{value:.3f}</td>'
+                            else:
+                                # 上三角（留空）
+                                table_html += '<td style="border: 1px solid #ddd; padding: 4px; background-color: #f5f5f5;"></td>'
+                        
+                        table_html += "</tr>"
+                    
+                    table_html += "</tbody></table></div>"
+            
+            if not table_html:
+                return "<p>無可用的相似度矩陣數據</p>"
+            
+            # 添加顏色說明
+            table_html += """
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                <strong>相似度範圍：</strong>
+                <span style="background: #ff9999; padding: 2px 8px; margin-right: 10px;">0.8-1.0 (高)</span>
+                <span style="background: #ffcc99; padding: 2px 8px; margin-right: 10px;">0.5-0.8 (中)</span>
+                <span style="background: #ffffcc; padding: 2px 8px; margin-right: 10px;">0.3-0.5 (低)</span>
+                <span style="background: #ccffcc; padding: 2px 8px;">&lt;0.3 (無)</span>
+            </p>
+            """
+            
+            return table_html
+            
+        except Exception as e:
+            self.logger.error(f"生成相似度矩陣表格失敗: {e}")
+            return "<p>相似度矩陣表格生成失敗</p>"
+    
+    def _get_similarity_color(self, value: float) -> str:
+        """根據相似度值取得顏色"""
+        if value >= 0.8:
+            return '#ff9999'  # 高相似度 - 淺紅
+        elif value >= 0.5:
+            return '#ffcc99'  # 中相似度 - 淺橘
+        elif value >= 0.3:
+            return '#ffffcc'  # 低相似度 - 淺黃
+        else:
+            return '#ccffcc'  # 無相似度 - 淺綠
 
 

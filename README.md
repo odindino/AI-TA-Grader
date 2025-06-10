@@ -163,4 +163,15 @@ AI-TA-Grader/
 
 歡迎任何形式的貢獻！如果您有任何建議、發現 bug，或是想新增功能，請隨時提出 Issue 或發送 Pull Request。
 
+## 🔍 關鍵詞
+
+NTUCOOL, 學生考試批改, AI 助教, 相似度檢測, 教學輔助工具, 抄襲檢測, 自動評分, 教育科技, Gemini API
+
+---
+
+**開發者**: odindino  
+**初版日期**: 2025-06-10  
+**最後更新**: 2025-06-11  
+**版本**: v2.1 (Multi-Question Support)  
+
 Made with ❤️ for a more efficient and fair academic world.

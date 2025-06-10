@@ -106,6 +106,11 @@ class AnalysisEngine:
                     qid,
                     use_genai=use_genai
                 )
+                # 添加矩陣數據到視覺化結果中
+                if DO_SIMILARITY_CHECK and 'similarity_matrix' in processed_data:
+                    viz_results['matrix_data'] = processed_data['similarity_matrix']
+                    viz_results['names'] = processed_data['names']
+                
                 result_df.attrs[f'Q{qid}_visualization'] = viz_results
             
             if log_callback:
@@ -270,55 +275,43 @@ class AnalysisEngine:
         
         return min(bonus, 3.0)  # 最多3分加分
     
-    def _find_question_columns(self, df: pd.DataFrame, target_questions: List[int]) -> Dict[int, str]:
-        """尋找問題欄位，支援不同的命名格式
+    def _find_question_columns(self, df: pd.DataFrame, target_questions: List[int] = None) -> Dict[int, str]:
+        """自動檢測所有問題欄位
         
         Args:
             df: 數據框
-            target_questions: 目標問題編號列表
+            target_questions: 目標問題編號列表（已廢棄，改為自動檢測）
             
         Returns:
             Dict[int, str]: 問題編號到欄位名稱的映射
         """
         question_cols = {}
         
-        for qid in target_questions:
-            # 嘗試不同的欄位命名模式
-            patterns = [
-                f'Q{qid}',  # 簡單格式: Q1, Q2
-                f'352902',  # Canvas問題ID格式 (Q1對應352902)
-                f'352903',  # Canvas問題ID格式 (Q2對應352903)
-                f'352904',  # 以此類推
-                f'352905',
-                f'352906',
-            ]
+        # 自動檢測所有問題欄位（以數字開頭或包含常見問題ID模式）
+        potential_question_cols = []
+        for col in df.columns:
+            col_str = str(col).strip()
+            # 檢測包含問題ID的欄位（352xxx, 362xxx等Canvas格式）
+            if (col_str and 
+                (col_str.startswith('352') or 
+                 col_str.startswith('362') or 
+                 col_str.startswith('Q') or
+                 any(char.isdigit() for char in col_str[:10])) and
+                '10.0' not in col_str and  # 排除分數欄位
+                'pts' not in col_str.lower() and
+                len(col_str) > 10):  # 問題欄位通常比較長
+                potential_question_cols.append(col)
+        
+        # 為檢測到的問題欄位分配序號
+        for i, col in enumerate(potential_question_cols, 1):
+            question_cols[i] = col
             
-            # 特定的問題ID映射 (根據實際的Canvas ID)
-            canvas_id_map = {
-                1: '352902',
-                2: '352903',
-                3: '352904',
-                4: '352905',
-                11: '352906'
-            }
-            
-            # 優先使用Canvas ID映射
-            if qid in canvas_id_map:
-                canvas_id = canvas_id_map[qid]
-                for col in df.columns:
-                    if canvas_id in col and '10.' not in col:  # 排除分數欄位
-                        question_cols[qid] = col
-                        break
-            
-            # 如果沒找到，嘗試其他模式
-            if qid not in question_cols:
-                for pattern in patterns:
-                    for col in df.columns:
-                        if pattern in col and col not in question_cols.values():
-                            question_cols[qid] = col
-                            break
-                    if qid in question_cols:
-                        break
+        # 記錄檢測結果
+        if hasattr(self, 'logger'):
+            self.logger.info(f"自動檢測到 {len(question_cols)} 個問題欄位")
+            for qid, col in question_cols.items():
+                col_preview = col[:80] + '...' if len(col) > 80 else col
+                self.logger.info(f"  Q{qid}: {col_preview}")
         
         return question_cols
     
@@ -342,8 +335,14 @@ class AnalysisEngine:
             results = {}
             all_visualizations = {}
             
-            # 找出問題欄位 - 處理不同的欄位命名格式
-            question_cols = self._find_question_columns(df, TARGET_SCORE_Q)
+            # 自動檢測所有問題欄位
+            question_cols = self._find_question_columns(df)
+            
+            if log_callback:
+                log_callback(f"檢測到 {len(question_cols)} 個問題欄位，將逐一處理...")
+                for qid, col in list(question_cols.items())[:3]:  # 顯示前3個作為示例
+                    col_preview = col[:50] + '...' if len(col) > 50 else col
+                    log_callback(f"  Q{qid}: {col_preview}")
             
             # 處理每個問題
             for qid, col in question_cols.items():

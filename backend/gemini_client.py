@@ -89,9 +89,18 @@ class GeminiClient:
                 prompt,
                 generation_config=genai.types.GenerationConfig(
                     max_output_tokens=150,
-                    temperature=0.1
+                    temperature=0.1,
+                    candidate_count=1
                 )
             )
+            
+            # 檢查回應狀態
+            if not response.candidates or not response.candidates[0].content.parts:
+                finish_reason = response.candidates[0].finish_reason if response.candidates else "NO_CANDIDATES"
+                self.logger.warning(f"🚨 API回應被過濾 (finish_reason: {finish_reason})，使用本地評分")
+                # 返回本地評分結果
+                local_score = self._estimate_local_score(text)
+                return local_score, 0  # AI風險設為0（因為API過濾不能判斷）
             
             # 記錄 AI 回應
             response_text = response.text.strip()
@@ -106,7 +115,10 @@ class GeminiClient:
             
         except Exception as e:
             self.logger.error(f"評分失敗: {e}")
-            return 0.0, 0
+            # 使用本地評分作為後備
+            local_score = self._estimate_local_score(text)
+            self.logger.info(f"💻 使用本地評分: {local_score}")
+            return local_score, 0
     
     def _extract_score_from_response(self, response_text: str) -> float:
         """從Gemini回應中提取分數"""
@@ -174,6 +186,34 @@ class GeminiClient:
                 score = min(score, 10.0)  # 限制最高分為10分
         
         return score, ai_risk
+    
+    def _estimate_local_score(self, text: str) -> float:
+        """本地評分估算（從analyzer.py複製）"""
+        if not text.strip():
+            return 0.0
+        
+        text_clean = text.strip().lower()
+        
+        # 基於文本長度的基礎分數
+        word_count = len(text_clean.split())
+        if word_count < 20:
+            base_score = 2.0
+        elif word_count < 50:
+            base_score = 4.0
+        elif word_count < 100:
+            base_score = 6.0
+        elif word_count < 200:
+            base_score = 7.0
+        else:
+            base_score = 8.0
+        
+        # 檢查是否有結構化回答
+        structure_bonus = 0.0
+        if any(marker in text for marker in ['1.', '2.', '3.', '•', '-', 'advantage', 'disadvantage']):
+            structure_bonus = 0.5
+        
+        final_score = min(base_score + structure_bonus, 10.0)
+        return max(final_score, 1.0) if text.strip() else 0.0
 
 
 # 保持向後相容的函數接口
