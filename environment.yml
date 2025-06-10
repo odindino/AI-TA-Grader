@@ -21,3 +21,4 @@ dependencies:
   - pip:
     - pywebview
     - google-generativeai
+    - PyYAML

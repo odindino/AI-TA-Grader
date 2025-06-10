@@ -38,7 +38,7 @@ AI-TA-Grader 是一個專為教師與助教設計的桌面應用程式，利用 
 從 GitHub 下載或 clone 此專案：
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/AI-TA-Grader.git
+git clone https://github.com/odindino/AI-TA-Grader.git
 cd AI-TA-Grader
 ```
 
