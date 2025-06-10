@@ -224,6 +224,176 @@ def comprehensive_plagiarism_check(texts: list[str], names: list[str] = None):
         "tfidf_details": tfidf_details
     }
 
+def calculate_advanced_similarity(text1: str, text2: str):
+    """
+    計算高級相似度，結合多種工業級算法
+    參考Turnitin等商業系統的檢測方法
+    """
+    if not text1.strip() or not text2.strip():
+        return 0.0
+    
+    # 預處理
+    def preprocess(text):
+        # 轉小寫並規範化空白字符
+        text = re.sub(r'\s+', ' ', text.lower().strip())
+        # 移除標點但保留文本結構
+        text = re.sub(r'[^\w\s]', ' ', text)
+        return text
+    
+    proc_text1 = preprocess(text1)
+    proc_text2 = preprocess(text2)
+    
+    # 1. 最長公共子序列相似度 (LCS)
+    def lcs_similarity(s1, s2):
+        words1 = s1.split()
+        words2 = s2.split()
+        
+        # 動態規劃計算LCS
+        m, n = len(words1), len(words2)
+        if m == 0 or n == 0:
+            return 0.0
+        
+        dp = [[0] * (n + 1) for _ in range(m + 1)]
+        
+        for i in range(1, m + 1):
+            for j in range(1, n + 1):
+                if words1[i-1] == words2[j-1]:
+                    dp[i][j] = dp[i-1][j-1] + 1
+                else:
+                    dp[i][j] = max(dp[i-1][j], dp[i][j-1])
+        
+        lcs_length = dp[m][n]
+        return 2.0 * lcs_length / (m + n)
+    
+    # 2. 編輯距離相似度 (Levenshtein Distance)
+    def edit_distance_similarity(s1, s2):
+        words1 = s1.split()
+        words2 = s2.split()
+        
+        if len(words1) == 0 and len(words2) == 0:
+            return 1.0
+        if len(words1) == 0 or len(words2) == 0:
+            return 0.0
+        
+        # 計算詞級別的編輯距離
+        m, n = len(words1), len(words2)
+        dp = [[0] * (n + 1) for _ in range(m + 1)]
+        
+        for i in range(m + 1):
+            dp[i][0] = i
+        for j in range(n + 1):
+            dp[0][j] = j
+        
+        for i in range(1, m + 1):
+            for j in range(1, n + 1):
+                if words1[i-1] == words2[j-1]:
+                    dp[i][j] = dp[i-1][j-1]
+                else:
+                    dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+        
+        max_len = max(m, n)
+        return 1.0 - (dp[m][n] / max_len)
+    
+    # 3. 語義塊相似度 (基於連續詞組)
+    def semantic_block_similarity(s1, s2, block_size=4):
+        words1 = s1.split()
+        words2 = s2.split()
+        
+        if len(words1) < block_size or len(words2) < block_size:
+            return 0.0
+        
+        blocks1 = [' '.join(words1[i:i+block_size]) for i in range(len(words1)-block_size+1)]
+        blocks2 = [' '.join(words2[i:i+block_size]) for i in range(len(words2)-block_size+1)]
+        
+        if not blocks1 or not blocks2:
+            return 0.0
+        
+        common_blocks = len(set(blocks1) & set(blocks2))
+        total_blocks = len(set(blocks1) | set(blocks2))
+        
+        return common_blocks / total_blocks if total_blocks > 0 else 0.0
+    
+    # 4. 字符級別相似度（difflib）
+    char_sim = difflib.SequenceMatcher(None, proc_text1, proc_text2).ratio()
+    
+    # 5. 詞彙重疊相似度（Jaccard）
+    words1 = set(proc_text1.split())
+    words2 = set(proc_text2.split())
+    jaccard_sim = len(words1 & words2) / len(words1 | words2) if (words1 | words2) else 0.0
+    
+    # 6. N-gram 相似度
+    ngram_sim = calculate_ngram_similarity(proc_text1, proc_text2, n=3)
+    
+    # 計算各種高級相似度
+    lcs_sim = lcs_similarity(proc_text1, proc_text2)
+    edit_sim = edit_distance_similarity(proc_text1, proc_text2)
+    semantic_sim = semantic_block_similarity(proc_text1, proc_text2)
+    
+    # 加權組合所有相似度指標
+    # 權重基於不同算法的檢測能力和準確性調整
+    combined_similarity = (
+        char_sim * 0.15 +           # 字符級檢測
+        jaccard_sim * 0.20 +        # 詞彙重疊
+        ngram_sim * 0.15 +          # N-gram模式
+        lcs_sim * 0.20 +            # 最長公共子序列
+        edit_sim * 0.15 +           # 編輯距離
+        semantic_sim * 0.15         # 語義塊檢測
+    )
+    
+    return combined_similarity
+
+def calculate_text_similarity_enhanced(texts: list[str], names: list[str] = None, threshold=0.6):
+    """
+    增強版文本相似度檢測，採用多種工業級算法
+    """
+    if len(texts) < 2:
+        return [0] * len(texts), []
+    
+    results = []
+    detailed_results = []
+    
+    for i, text_i in enumerate(texts):
+        if not text_i or not text_i.strip():
+            results.append(0)
+            continue
+            
+        max_similarity = 0
+        best_match_idx = -1
+        
+        for j, text_j in enumerate(texts):
+            if i == j or not text_j or not text_j.strip():
+                continue
+                
+            # 使用增強的相似度計算
+            similarity = calculate_advanced_similarity(text_i, text_j)
+            
+            if similarity > max_similarity:
+                max_similarity = similarity
+                best_match_idx = j
+        
+        # 記錄詳細結果
+        if max_similarity >= threshold and best_match_idx >= 0:
+            student_i = names[i] if names else f"學生 {i+1}"
+            student_j = names[best_match_idx] if names else f"學生 {best_match_idx+1}"
+            detailed_results.append({
+                "student_1": student_i,
+                "student_2": student_j,
+                "similarity": float(max_similarity),
+                "index_1": i,
+                "index_2": best_match_idx,
+                "method": "enhanced_multi_algorithm"
+            })
+        
+        # 分級判定（更嚴格的閾值）
+        if max_similarity >= 0.80:      # 提高高相似度閾值
+            results.append(2)           # 高度相似
+        elif max_similarity >= threshold:
+            results.append(1)           # 中等相似
+        else:
+            results.append(0)           # 無明顯相似
+    
+    return results, detailed_results
+
 # 測試函數
 def test_alternative_methods():
     """測試替代相似度檢測方法"""

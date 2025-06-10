@@ -18,6 +18,8 @@ dependencies:
   - numpy
   - scikit-learn
   - openpyxl
+  - matplotlib
+  - seaborn
   - pip:
     - pywebview
     - google-generativeai

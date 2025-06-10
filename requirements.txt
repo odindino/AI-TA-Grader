@@ -5,3 +5,5 @@ scikit-learn
 google-generativeai
 openpyxl
 PyYAML
+matplotlib
+seaborn

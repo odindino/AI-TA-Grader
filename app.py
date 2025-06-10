@@ -3,7 +3,12 @@ import threading
 import asyncio
 import os
 import re
-from analyzer import run_analysis # 從 analyzer.py 匯入後端邏輯
+import sys
+
+# 添加backend目錄到Python路徑
+sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
+
+from backend.analyzer import AnalysisEngine  # 從重構的backend模組匯入
 
 class Api:
     """
@@ -75,10 +80,11 @@ class Api:
         file_path = params.get('filePath', '').strip()
         model_name = params.get('modelName', 'gemini-1.5-pro-latest').strip()
         
-        # 輸入驗證
+        # 輸入驗證 - API金鑰現在為可選
         if not api_key:
-            self._log_to_frontend("❌ 請先輸入 API 金鑰。")
-            return {"status": "error", "message": "API 金鑰未提供"}
+            self._log_to_frontend("⚠️ 未提供API金鑰，將只使用非GenAI方法進行相似度分析。")
+        else:
+            self._log_to_frontend("🔑 使用API金鑰，將同時執行GenAI和非GenAI方法進行相似度分析。")
         
         # 如果沒有提供檔案路徑，使用預設測試檔案
         if not file_path:
@@ -130,8 +136,21 @@ class Api:
             asyncio.set_event_loop(loop)
             
             try:
-                # 執行非同步的分析主函式
-                loop.run_until_complete(run_analysis(api_key, file_path, unique_output_base_name, self._log_to_frontend, model_name))
+                # 初始化分析引擎
+                engine = AnalysisEngine(api_key if api_key else None)
+                
+                # 如果有API金鑰，設定Gemini
+                if api_key:
+                    engine.configure_gemini(api_key, model_name)
+                
+                # 執行完整數據集分析
+                results = loop.run_until_complete(
+                    engine.analyze_complete_dataset(file_path, self._log_to_frontend)
+                )
+                
+                # 保存結果
+                self._save_analysis_results(results, unique_output_base_name)
+                
                 self._log_to_frontend("✅ 分析完成！")
             finally:
                 loop.close()
@@ -140,6 +159,32 @@ class Api:
                     self.window.evaluate_js('analysis_complete()')
         except Exception as e:
             self._log_to_frontend(f"❌ 分析過程中發生錯誤: {str(e)}")
+    
+    def _save_analysis_results(self, results, output_base_name):
+        """保存分析結果到多種格式"""
+        try:
+            df = results['dataframe']
+            html_report = results['html_report']
+            
+            # 保存Excel檔案
+            xlsx_path = f"{output_base_name}.xlsx"
+            df.to_excel(xlsx_path, index=False)
+            self._log_to_frontend(f"📊 Excel報告已保存: {os.path.basename(xlsx_path)}")
+            
+            # 保存HTML報告
+            html_path = f"{output_base_name}.html"
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_report)
+            self._log_to_frontend(f"🌐 HTML報告已保存: {os.path.basename(html_path)}")
+            
+            # 保存CSV檔案
+            csv_path = f"{output_base_name}.csv"
+            df.to_csv(csv_path, index=False)
+            self._log_to_frontend(f"📋 CSV檔案已保存: {os.path.basename(csv_path)}")
+            
+        except Exception as e:
+            self._log_to_frontend(f"❌ 保存結果時發生錯誤: {str(e)}")
+
     def _log_to_frontend(self, message: str):
         """
         一個簡單的回呼函式，用於從後端傳遞字串訊息到前端。
