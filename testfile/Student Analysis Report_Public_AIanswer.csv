@@ -1,0 +1,158 @@
+name,id,sis_id,section,section_id,section_sis_id,submitted,attempt,"352902: 1.Compare and contrast the Czochralski (CZ) process and the Floating Zone (FZ) process for single-crystal silicon growth, detailing their respective advantages and disadvantages. In what specific application scenarios would the FZ method be preferred despite its higher cost?
+2.Describe the ""channeling effect"" in ion implantation. What is its impact on the resulting dopant profile? List and explain at least three methods that can be employed to reduce or avoid the channeling effect during ion implantation.",10.0,"352903: Choose two out of three problems below to answer. You will get full credit for answering two problems correctly. Noextra credit if you answer three of them.
+1.Explain the fundamental differences between the mass-transport-limited regime and the surface-reaction-limited regime in Chemical Vapor Deposition (CVD). If a CVD process is showing instability suspected to be due to poor gas flow control, how would you adjust process parameters (e.g., temperature, pressure) to mitigate this issue? If the deposition rate becomes too low after these adjustments, what further steps could be taken to optimize the process?
+2.Describe the working principle of Molecular Beam Epitaxy (MBE). What are the main advantages and disadvantages of MBE for the epitaxial growth of III-V compound semiconductors?
+3.In heteroepitaxy, lattice mismatch is a critical parameter. What phenomena typically occur when the thickness of an epitaxial layer exceeds the critical layer thickness?",10.0,n correct,n incorrect,score
+Kujo Jotaro,123456,123@gmail.com,波紋與替身之理論與應用(JOJO1999),45510,119-2:299_D1545,2025-06-02 04:11:36 UTC,1,"Comparison of the two methods of Czochralski (CZ) process and  Floating Zone (FZ) process  for single -crystal silicon growth based on advantages and disadvantages as follow below:   
+CZ method is more popular used for mass production  for Silicon crystal growth was discovered accidently in 1956.  
+1. Cheaper
+2. Larger wafer size (300 mm in production)
+3. Reusable materials
+• Floating Zone process is alternative way to make single-crystal ingot.
+1. Pure silicon crystal (no crucible)
+2. More expensive, smaller wafer size (150 mm)
+3. Mainly for power devices
+
+Even though FZ method is more expensive its useful in making  smaller wafer size typical 150 nm is primary advantage of FZ is higher Si purity with less crucible contamination.
+
+Answer 2. Channeling effect is phenomena that occur during the incident angle is right, ion can travel long distance without collision with lattice atoms. Also the projected range always follows Gaussian distribution. 
+ There are many “channels” along certain angles
+[image.png] (/users/245365/files/7781568/preview?verifier=rEWww81ULr3eThi8RFAAPmbHH0zO63P8tMTWMWkP) [image.png] (/users/245365/files/7781576/preview?verifier=ReMKEh3FlK1R42LXrgnr5h7mDGIZgsPeoplMABOH)
+
+The impact of dopant profile causes uncontrollable. 
+
+The most common method to reduce or avoid channeling effect as follow below:
+
+• Tilt wafer, 7° is most commonly used
+• Shadowing effect (Ions blocked by structures)
+• Screen oxide (due to collision scattering, the incident
+angle of ions will distribute in a wider range)
+• Pre-amorphous implantation by Germanium
+• Rotate wafer and post-implantation diffusion
+
+[image.png] (/users/245365/files/7781547/preview?verifier=3ZUe8zXssLBQ0OtW9VFSvd09Pmbi0BlFHRz9vmte)",0,"Answer 1. 
+
+These two above mechanisms (mass- transport -limited and surface- reaction- limited regime) limits the overall deposition rate of CVD depends largely on the specific conditions of the process temperature and pressure. 
+
+Surface-reaction-limited regime
+– Chemical reaction rate can not match the diffusion and adsorption rates of precursor
+– Precursors pile up on the substrate surface and wait their turn to react
+– The deposition rate in surface-reaction-limited regime is very sensitive to temperature
+– LPCVD processes are normally operated in this regime
+
+[image.png] (/users/245365/files/7781612/preview?verifier=8DqDw0Khw9P31nWOIZsmKAjVJjCENV76ut4MejWk)
+
+Mass-transport-limited regime
+– When the surface chemical reaction rate is high enough, the chemical precursors react immediately
+when they adsorb on the substrate surface
+– The deposition rate is limited by the precursors diffusion process
+– Deposition rate is insensitive to temperature
+– The deposition is mainly controlled by gas flow rates
+
+[image.png] (/users/245365/files/7781623/preview?verifier=ieckNnUT5Uhuzw5tRmatIHKLA02UyOPKcZrj1f7J)
+
+ If a CVD process is showing instability suspected to be due to poor gas flow control, how would you adjust process parameters (e.g., temperature, pressure) to mitigate this issue?   Incase of such issues the deposition rate of CVD  is mainly controlled by gas flow rates is insensitive to temperature parameters. So, adjust pressure is critical by Lower pressure => larger Dep. rate, extends reaction limited regime. however control temperature is very critical in deposition rate of CVD.  
+Lower activation energy for surface reactions for gases which allows reactions to proceed effectively even at lower temperatures. Raising the concentration of reactive species near the surface can increase collision frequency, partially compensating for slower reaction kinetics. In the surface-reaction-limited regime, this allows reactions to proceed effectively even at lower temperatures. So, mass transport and surface-reaction-limited regime are critical in maintain reaction rate as explained by Arrhenius relationship. 
+
+CVD Reactor Deposition Regime
+
+ Most single wafer process reactors are designed in mass-transport-limited regime
+
+ It is easier to control the gas flow rate 
+
+ 
+
+Answer 2. The concept of MBE was originally from controlling the growth of compound semiconductor around 1960s. With the involvements from Bell Labs and IBM, both the MBE technique and hardware were substantially improved. Major subsequent development of MBE films was enabled by J.R. Arthur's investigations of kinetic behavior of growth mechanisms and Alfred Y. Cho's in situ observation of MBE process using RHEED in the late 1960s.
+The basic principle of MBE growth is the direct sublimation of solid source materials into a gas phase at typically at very low pressures because the gas pressure is so low, the individual molecules and atoms are able to travel many centimeters before they collide with another molecule.
+
+ Main Features of MBE
+
+• Core component: effusion cell
+
+• Slow vacuum deposition on a heated substrate under ultra-high vacuum conditions
+
+• Growth ~< a layer at a time 
+
+Advantages: Extremely flexible; simple chemistry, in-situ monitoring; atomic layer control; non-equilibrium technique.
+Disadvantages: No in-situ cleaning or purifying reactions; expensive (to assemble and operate); non-equilibrium technique
+Current status: A research workhorse; increasingly used heavily in production",0,12,0,16.0
+Joseph Joestar,123456,123@gmail.com,波紋與替身之理論與應用(JOJO1999),45510,119-2:299_D1545,2025-06-02 04:00:01 UTC,1,"1.The CZ process melts Si ingot in a crucible, it is much cheaper and is able to fabricate a much larger wafer. The FZ process reorients a polycrystal Si with a heating coil without a crucible. It can achieve higher purity due to the lack of the crucible. But it is more expensive and can only fabricate a small wafer each time. The power devices usually require FZ process despite its higher cost.
+
+ 
+
+2. During the ion implantation, when a ion beam is applied on the substrate, usually the ion will stop at some point due to the collision. However, with certain incident angles, the ion will go through a much larger distance due to the lack of the collision. This may cause a uncontrollable dopping region size due to the distance of the ion traveling through is much different.
+
+We can use tilted angle method, rotate the wafer when the ion beam is shined, or use the screen oxide method to avoid channeling effect.",0,"Question 1: CVD Regimes and Process Control
+
+  The fundamental differences between mass-transport-limited and surface-reaction-limited regimes in CVD lie in the rate-determining step:
+
+  Surface-Reaction-Limited Regime:
+  - The chemical reaction rate at the surface is slower than the mass transport of reactants
+  - Deposition rate is highly sensitive to temperature (follows Arrhenius behavior)
+  - Precursor supply exceeds reaction capacity
+  - Commonly found in LPCVD processes at lower temperatures
+
+  Mass-Transport-Limited Regime:
+  - Surface reactions are fast, limited by reactant delivery to the surface
+  - Deposition rate is relatively insensitive to temperature
+  - Controlled primarily by gas flow rates and diffusion
+  - Typical in APCVD and higher temperature processes
+
+  For CVD instability due to poor gas flow control, I would adjust parameters as follows:
+  - Lower the pressure to extend the reaction-limited regime and reduce flow sensitivity
+  - Slightly increase temperature to enhance surface reaction rates and provide more process margin
+  - Optimize gas flow patterns through reactor design modifications
+
+  If deposition rate becomes too low after these adjustments:
+  - Increase precursor concentration in the gas phase
+  - Optimize temperature profile to find the sweet spot between stability and rate
+  - Consider pulsed CVD or other advanced techniques to decouple rate from stability
+
+  Question 2: Molecular Beam Epitaxy (MBE)
+
+  Working Principle:
+  MBE operates under ultra-high vacuum (UHV) conditions where solid source materials are heated in effusion cells to produce molecular beams. These
+  beams impinge on a heated substrate where they adsorb and react to form epitaxial layers. The extremely low pressure ensures long mean free paths,
+   allowing precise control over beam composition and enabling layer-by-layer growth.
+
+  Advantages for III-V Compound Semiconductors:
+  - Atomic-level control: Precise thickness control down to monolayer precision
+  - In-situ monitoring: Real-time growth monitoring using RHEED
+  - Sharp interfaces: Abrupt composition changes possible due to UHV environment
+  - Flexibility: Easy composition modulation and doping control
+  - High purity: UHV conditions minimize contamination
+
+  Disadvantages:
+  - Low growth rates: Typically 0.1-10 μm/hour, much slower than other techniques
+  - High cost: Expensive equipment and operation due to UHV requirements
+  - Limited throughput: Batch processing limitations affect commercial viability
+  - No in-situ cleaning: Cannot perform chemical cleaning during growth
+  - Scale limitations: Difficult to scale to large substrate sizes economically",0,12,0,21.0
+Giorno Giovanna,123456,123@gmail.com,波紋與替身之理論與應用(JOJO1999),45510,119-2:299_D1545,2025-06-02 04:10:34 UTC,1,"A1.
+CZ method is more popular
+1.Cheaper
+2.Larger wafer size (300 mm in production)
+3.Reusable materials
+
+Floating Zone
+1.Pure silicon crystal (no crucible)
+2.More expensive, smaller wafer size (150 mm)
+3.Mainly for power devices
+FZ method is only used for applications where silicon crystals with very low oxygen concentration are required.
+
+A2.
+In single crystal silicon,it has orderly arrangement .
+There are many“channels”along certain angles
+If the incident angle is right,ion can travel long distance without collision with lattice atoms:channeling effect
+It causes uncontrollable dopant profile
+1.Tilt wafer,7° is most commonly used
+2.Pre-amorphous implantation by Germanium
+3.Rotate wafer and post-implantation diffusion",0,"2.
+The working principle of MBE is in high vacuum or ultra-high vacuum . grow the crystal on the films layer epitaxially ,result in the highest achievable purity of the grown films.
+Advantages:
+Extremely flexible;simple chemistry,in- situ monitoring,atomic layer control,non-equilibrium technique.
+Disadvantages:
+No in-situ cleaning or purifying reactions; expensive (to assemble and operate);non-equilibrium technique.
+
+3.
+In the strained-layer epitaxy, as the strained-layer thickness increases, the total number of atoms under strain or the distorted atomic bonds grows,and at some point misfit dislocations are nucleated to relieve the homogeneous strain energy.",0,12,0,23.0
