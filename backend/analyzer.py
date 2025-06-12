@@ -72,16 +72,27 @@ class AnalysisEngine:
             # 資料預處理
             processed_data = self.data_processor.preprocess_responses(df, col)
             
-            # 相似度檢測 - 只使用本地方法
+            # 相似度檢測 - 優先使用工業級非AI方法
             if DO_SIMILARITY_CHECK:
+                if log_callback:
+                    log_callback(f"Q{qid} 使用工業級多算法相似度檢測（8種核心算法，參考Turnitin標準）")
+                
                 similarity_results = await self._calculate_similarity_batch(
                     processed_data['texts'], 
                     processed_data['names'],
-                    use_genai=False  # 強制使用本地方法
+                    use_genai=False  # 優先使用經過驗證的本地方法
                 )
                 processed_data['similarity_scores'] = similarity_results['scores']
                 processed_data['similarity_matrix'] = similarity_results['matrix']
                 processed_data['similarity_info'] = similarity_results['info']
+                
+                # 記錄檢測方法資訊
+                method_info = similarity_results['info']
+                if log_callback and method_info.get('status') == 'success':
+                    if method_info.get('method') == 'local':
+                        log_callback(f"Q{qid} 成功使用本地多算法檢測：{method_info.get('algorithms', '未知')}")
+                    elif method_info.get('method') == 'genai':
+                        log_callback(f"Q{qid} 使用GenAI檢測：{method_info.get('model', 'text-embedding-004')}")
             
             # 批次評分
             if use_genai and self.gemini_client:
